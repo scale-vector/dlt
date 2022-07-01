@@ -1,0 +1,1336 @@
+version: 183
+engine_version: 3
+name: metabasev4
+tables:
+  _dlt_version:
+    description: Created by DLT. Tracks schema updates
+    write_disposition: skip
+    columns:
+      version:
+        data_type: bigint
+        nullable: false
+      engine_version:
+        data_type: bigint
+        nullable: false
+      inserted_at:
+        data_type: timestamp
+        nullable: false
+  _dlt_loads:
+    description: Created by DLT. Tracks completed loads
+    write_disposition: skip
+    columns:
+      load_id:
+        data_type: text
+        nullable: false
+      status:
+        data_type: bigint
+        nullable: false
+      inserted_at:
+        data_type: timestamp
+        nullable: false
+  activity:
+    columns:
+      model_exists:
+        data_type: bool
+        nullable: true
+      topic:
+        data_type: text
+        nullable: true
+      model_id:
+        data_type: bigint
+        nullable: true
+      id:
+        data_type: bigint
+        nullable: true
+      user_id:
+        data_type: bigint
+        nullable: true
+      timestamp:
+        data_type: timestamp
+        nullable: true
+      user__email:
+        data_type: text
+        nullable: true
+      user__first_name:
+        data_type: text
+        nullable: true
+      user__last_login:
+        data_type: timestamp
+        nullable: true
+      user__is_qbnewb:
+        data_type: bool
+        nullable: true
+      user__is_superuser:
+        data_type: bool
+        nullable: true
+      user__id:
+        data_type: bigint
+        nullable: true
+      user__last_name:
+        data_type: text
+        nullable: true
+      user__date_joined:
+        data_type: timestamp
+        nullable: true
+      user__common_name:
+        data_type: text
+        nullable: true
+      model:
+        data_type: text
+        nullable: true
+      endpoint:
+        data_type: text
+        nullable: true
+      request_time:
+        data_type: timestamp
+        nullable: true
+      request_params:
+        data_type: text
+        nullable: true
+      _dlt_load_id:
+        data_type: text
+        nullable: false
+      _dlt_id:
+        unique: true
+        data_type: text
+        nullable: false
+      details__description:
+        data_type: text
+        nullable: true
+      details__name:
+        data_type: text
+        nullable: true
+      details__dashcards:
+        data_type: complex
+        nullable: true
+      table_id:
+        data_type: bigint
+        nullable: true
+      table__entity_type:
+        data_type: text
+        nullable: true
+      table__schema:
+        data_type: text
+        nullable: true
+      table__show_in_getting_started:
+        data_type: bool
+        nullable: true
+      table__name:
+        data_type: text
+        nullable: true
+      table__updated_at:
+        data_type: timestamp
+        nullable: true
+      table__active:
+        data_type: bool
+        nullable: true
+      table__id:
+        data_type: bigint
+        nullable: true
+      table__db_id:
+        data_type: bigint
+        nullable: true
+      table__field_order:
+        data_type: text
+        nullable: true
+      table__display_name:
+        data_type: text
+        nullable: true
+      table__created_at:
+        data_type: timestamp
+        nullable: true
+      database_id:
+        data_type: bigint
+        nullable: true
+      database__features:
+        data_type: complex
+        nullable: true
+      database__cache_field_values_schedule:
+        data_type: text
+        nullable: true
+      database__timezone:
+        data_type: text
+        nullable: true
+      database__auto_run_queries:
+        data_type: bool
+        nullable: true
+      database__metadata_sync_schedule:
+        data_type: text
+        nullable: true
+      database__name:
+        data_type: text
+        nullable: true
+      database__is_full_sync:
+        data_type: bool
+        nullable: true
+      database__updated_at:
+        data_type: timestamp
+        nullable: true
+      database__details:
+        data_type: complex
+        nullable: true
+      database__is_sample:
+        data_type: bool
+        nullable: true
+      database__id:
+        data_type: bigint
+        nullable: true
+      database__is_on_demand:
+        data_type: bool
+        nullable: true
+      database__engine:
+        data_type: text
+        nullable: true
+      database__created_at:
+        data_type: timestamp
+        nullable: true
+    write_disposition: append
+  logs:
+    columns:
+      timestamp:
+        data_type: timestamp
+        nullable: true
+      level:
+        data_type: text
+        nullable: true
+      fqns:
+        data_type: text
+        nullable: true
+      msg:
+        data_type: text
+        nullable: true
+      process_uuid:
+        data_type: text
+        nullable: true
+      endpoint:
+        data_type: text
+        nullable: true
+      request_time:
+        data_type: timestamp
+        nullable: true
+      request_params:
+        data_type: text
+        nullable: true
+      _dlt_load_id:
+        data_type: text
+        nullable: false
+      _dlt_id:
+        unique: true
+        data_type: text
+        nullable: false
+    write_disposition: append
+  logs__exception:
+    columns:
+      value:
+        data_type: text
+        nullable: true
+      _dlt_id:
+        unique: true
+        data_type: text
+        nullable: false
+      _dlt_parent_id:
+        foreign_key: true
+        data_type: text
+        nullable: false
+      _dlt_list_idx:
+        data_type: bigint
+        nullable: false
+    parent: logs
+  tasks:
+    columns:
+      id:
+        data_type: bigint
+        nullable: true
+      task:
+        data_type: text
+        nullable: true
+      db_id:
+        data_type: bigint
+        nullable: true
+      started_at:
+        data_type: timestamp
+        nullable: true
+      ended_at:
+        data_type: timestamp
+        nullable: true
+      duration:
+        data_type: bigint
+        nullable: true
+      endpoint:
+        data_type: text
+        nullable: true
+      request_time:
+        data_type: timestamp
+        nullable: true
+      request_params:
+        data_type: text
+        nullable: true
+      _dlt_load_id:
+        data_type: text
+        nullable: false
+      _dlt_id:
+        unique: true
+        data_type: text
+        nullable: false
+      task_details__total_tables:
+        data_type: bigint
+        nullable: true
+      task_details__tables_classified:
+        data_type: bigint
+        nullable: true
+      task_details__fields_classified:
+        data_type: bigint
+        nullable: true
+      task_details__fields_failed:
+        data_type: bigint
+        nullable: true
+      task_details__no_data_fingerprints:
+        data_type: bigint
+        nullable: true
+      task_details__failed_fingerprints:
+        data_type: bigint
+        nullable: true
+      task_details__updated_fingerprints:
+        data_type: bigint
+        nullable: true
+      task_details__fingerprints_attempted:
+        data_type: bigint
+        nullable: true
+      task_details__total_fks:
+        data_type: bigint
+        nullable: true
+      task_details__updated_fks:
+        data_type: bigint
+        nullable: true
+      task_details__total_failed:
+        data_type: bigint
+        nullable: true
+      task_details__total_fields:
+        data_type: bigint
+        nullable: true
+      task_details__updated_fields:
+        data_type: bigint
+        nullable: true
+      task_details__updated_tables:
+        data_type: bigint
+        nullable: true
+      task_details__timezone_id:
+        data_type: text
+        nullable: true
+      task_details__errors:
+        data_type: bigint
+        nullable: true
+      task_details__created:
+        data_type: bigint
+        nullable: true
+      task_details__updated:
+        data_type: bigint
+        nullable: true
+      task_details__deleted:
+        data_type: bigint
+        nullable: true
+      task_details__throwable:
+        data_type: complex
+        nullable: true
+    write_disposition: replace
+  stats:
+    columns:
+      slack_configured:
+        data_type: bool
+        nullable: true
+      running_on:
+        data_type: text
+        nullable: true
+      friendly_names:
+        data_type: bool
+        nullable: true
+      check_for_updates:
+        data_type: bool
+        nullable: true
+      site_name:
+        data_type: bool
+        nullable: true
+      has_sample_data:
+        data_type: bool
+        nullable: true
+      application_database:
+        data_type: text
+        nullable: true
+      email_configured:
+        data_type: bool
+        nullable: true
+      instance_started:
+        data_type: timestamp
+        nullable: true
+      sso_configured:
+        data_type: bool
+        nullable: true
+      uuid:
+        data_type: text
+        nullable: true
+      version:
+        data_type: text
+        nullable: true
+      timestamp:
+        data_type: timestamp
+        nullable: true
+      stats__execution:
+        data_type: complex
+        nullable: true
+      stats__group:
+        data_type: complex
+        nullable: true
+      stats__table:
+        data_type: complex
+        nullable: true
+      stats__system:
+        data_type: complex
+        nullable: true
+      stats__question:
+        data_type: complex
+        nullable: true
+      stats__dashboard:
+        data_type: complex
+        nullable: true
+      stats__field:
+        data_type: complex
+        nullable: true
+      stats__alert:
+        data_type: complex
+        nullable: true
+      stats__cache:
+        data_type: complex
+        nullable: true
+      stats__segment:
+        data_type: complex
+        nullable: true
+      stats__pulse:
+        data_type: complex
+        nullable: true
+      stats__database:
+        data_type: complex
+        nullable: true
+      stats__collection:
+        data_type: complex
+        nullable: true
+      stats__user:
+        data_type: complex
+        nullable: true
+      stats__metric:
+        data_type: complex
+        nullable: true
+      endpoint:
+        data_type: text
+        nullable: true
+      request_time:
+        data_type: timestamp
+        nullable: true
+      request_params:
+        data_type: text
+        nullable: true
+      _dlt_load_id:
+        data_type: text
+        nullable: false
+      _dlt_id:
+        unique: true
+        data_type: text
+        nullable: false
+    write_disposition: replace
+  cards:
+    columns:
+      archived:
+        data_type: bool
+        nullable: true
+      table_id:
+        data_type: bigint
+        nullable: true
+      creator__email:
+        data_type: text
+        nullable: true
+      creator__first_name:
+        data_type: text
+        nullable: true
+      creator__last_login:
+        data_type: timestamp
+        nullable: true
+      creator__is_qbnewb:
+        data_type: bool
+        nullable: true
+      creator__is_superuser:
+        data_type: bool
+        nullable: true
+      creator__id:
+        data_type: bigint
+        nullable: true
+      creator__last_name:
+        data_type: text
+        nullable: true
+      creator__date_joined:
+        data_type: timestamp
+        nullable: true
+      creator__common_name:
+        data_type: text
+        nullable: true
+      database_id:
+        data_type: bigint
+        nullable: true
+      enable_embedding:
+        data_type: bool
+        nullable: true
+      collection_id:
+        data_type: bigint
+        nullable: true
+      query_type:
+        data_type: text
+        nullable: true
+      name:
+        data_type: text
+        nullable: true
+      creator_id:
+        data_type: bigint
+        nullable: true
+      updated_at:
+        data_type: timestamp
+        nullable: true
+      dataset_query__database:
+        data_type: bigint
+        nullable: true
+      dataset_query__query:
+        data_type: complex
+        nullable: true
+      dataset_query__type:
+        data_type: text
+        nullable: true
+      id:
+        data_type: bigint
+        nullable: true
+      display:
+        data_type: text
+        nullable: true
+      last_edit_info__id:
+        data_type: bigint
+        nullable: true
+      last_edit_info__email:
+        data_type: text
+        nullable: true
+      last_edit_info__first_name:
+        data_type: text
+        nullable: true
+      last_edit_info__last_name:
+        data_type: text
+        nullable: true
+      last_edit_info__timestamp:
+        data_type: timestamp
+        nullable: true
+      visualization_settings__table_pivot:
+        data_type: bool
+        nullable: true
+      visualization_settings__stackable_stack_type:
+        data_type: text
+        nullable: true
+      visualization_settings__graph_dimensions:
+        data_type: complex
+        nullable: true
+      visualization_settings__graph_metrics:
+        data_type: complex
+        nullable: true
+      collection__archived:
+        data_type: bool
+        nullable: true
+      collection__slug:
+        data_type: text
+        nullable: true
+      collection__color:
+        data_type: text
+        nullable: true
+      collection__name:
+        data_type: text
+        nullable: true
+      collection__id:
+        data_type: bigint
+        nullable: true
+      collection__location:
+        data_type: text
+        nullable: true
+      favorite:
+        data_type: bool
+        nullable: true
+      created_at:
+        data_type: timestamp
+        nullable: true
+      endpoint:
+        data_type: text
+        nullable: true
+      request_time:
+        data_type: timestamp
+        nullable: true
+      request_params:
+        data_type: text
+        nullable: true
+      _dlt_load_id:
+        data_type: text
+        nullable: false
+      _dlt_id:
+        unique: true
+        data_type: text
+        nullable: false
+      dataset_query__native:
+        data_type: complex
+        nullable: true
+      visualization_settings__table_pivot_column:
+        data_type: text
+        nullable: true
+      visualization_settings__table_cell_column:
+        data_type: text
+        nullable: true
+      visualization_settings__column_settings:
+        data_type: complex
+        nullable: true
+      description:
+        data_type: text
+        nullable: true
+      visualization_settings__graph_show_values:
+        data_type: bool
+        nullable: true
+      visualization_settings__graph_label_value_frequency:
+        data_type: text
+        nullable: true
+      visualization_settings__graph_x_axis_scale:
+        data_type: text
+        nullable: true
+      visualization_settings__graph_y_axis_scale:
+        data_type: text
+        nullable: true
+      visualization_settings__series_settings:
+        data_type: complex
+        nullable: true
+      visualization_settings__table_columns:
+        data_type: complex
+        nullable: true
+      visualization_settings__pivot_table_column_split:
+        data_type: complex
+        nullable: true
+      visualization_settings__table_column_formatting:
+        data_type: complex
+        nullable: true
+      collection__description:
+        data_type: text
+        nullable: true
+      visualization_settings__graph_y_axis_title_text:
+        data_type: text
+        nullable: true
+      visualization_settings__graph_x_axis_title_text:
+        data_type: text
+        nullable: true
+      visualization_settings__pie_colors:
+        data_type: complex
+        nullable: true
+      visualization_settings__pie_show_legend:
+        data_type: bool
+        nullable: true
+      visualization_settings__pie_show_legend_perecent:
+        data_type: bool
+        nullable: true
+      visualization_settings__pie_slice_threshold:
+        data_type: bigint
+        nullable: true
+      visualization_settings__graph_label_value_formatting:
+        data_type: text
+        nullable: true
+      visualization_settings__pie_slice_threshold_v_double:
+        data_type: double
+        nullable: true
+      collection__personal_owner_id:
+        data_type: bigint
+        nullable: true
+      visualization_settings__stackable_stack_display:
+        data_type: text
+        nullable: true
+    write_disposition: replace
+  cards__result_metadata:
+    columns:
+      name:
+        data_type: text
+        nullable: true
+      field_ref:
+        data_type: complex
+        nullable: true
+      effective_type:
+        data_type: text
+        nullable: true
+      id:
+        data_type: bigint
+        nullable: true
+      display_name:
+        data_type: text
+        nullable: true
+      fingerprint:
+        data_type: complex
+        nullable: true
+      base_type:
+        data_type: text
+        nullable: true
+      _dlt_parent_id:
+        foreign_key: true
+        data_type: text
+        nullable: false
+      _dlt_list_idx:
+        data_type: bigint
+        nullable: false
+      _dlt_id:
+        unique: true
+        data_type: text
+        nullable: false
+      semantic_type:
+        data_type: text
+        nullable: true
+      unit:
+        data_type: text
+        nullable: true
+      table_id:
+        data_type: bigint
+        nullable: true
+      source:
+        data_type: text
+        nullable: true
+      visibility_type:
+        data_type: text
+        nullable: true
+      description:
+        data_type: text
+        nullable: true
+    parent: cards
+  users:
+    columns:
+      email:
+        data_type: text
+        nullable: true
+      ldap_auth:
+        data_type: bool
+        nullable: true
+      first_name:
+        data_type: text
+        nullable: true
+      is_active:
+        data_type: bool
+        nullable: true
+      is_qbnewb:
+        data_type: bool
+        nullable: true
+      updated_at:
+        data_type: timestamp
+        nullable: true
+      is_superuser:
+        data_type: bool
+        nullable: true
+      id:
+        data_type: bigint
+        nullable: true
+      last_name:
+        data_type: text
+        nullable: true
+      date_joined:
+        data_type: timestamp
+        nullable: true
+      personal_collection_id:
+        data_type: bigint
+        nullable: true
+      common_name:
+        data_type: text
+        nullable: true
+      google_auth:
+        data_type: bool
+        nullable: true
+      endpoint:
+        data_type: text
+        nullable: true
+      request_time:
+        data_type: timestamp
+        nullable: true
+      request_params:
+        data_type: text
+        nullable: true
+      _dlt_load_id:
+        data_type: text
+        nullable: false
+      _dlt_id:
+        unique: true
+        data_type: text
+        nullable: false
+      last_login:
+        data_type: timestamp
+        nullable: true
+    write_disposition: replace
+  users__group_ids:
+    columns:
+      value:
+        data_type: bigint
+        nullable: true
+      _dlt_id:
+        unique: true
+        data_type: text
+        nullable: false
+      _dlt_parent_id:
+        foreign_key: true
+        data_type: text
+        nullable: false
+      _dlt_list_idx:
+        data_type: bigint
+        nullable: false
+    parent: users
+  fields:
+    columns:
+      id:
+        data_type: bigint
+        nullable: true
+      name:
+        data_type: text
+        nullable: true
+      base_type:
+        data_type: text
+        nullable: true
+      table_name:
+        data_type: text
+        nullable: true
+      endpoint:
+        data_type: text
+        nullable: true
+      request_time:
+        data_type: timestamp
+        nullable: true
+      request_params:
+        data_type: text
+        nullable: true
+      _dlt_load_id:
+        data_type: text
+        nullable: false
+      _dlt_id:
+        unique: true
+        data_type: text
+        nullable: false
+      semantic_type:
+        data_type: text
+        nullable: true
+      schema:
+        data_type: text
+        nullable: true
+    write_disposition: replace
+  collections:
+    columns:
+      name:
+        data_type: text
+        nullable: true
+      id:
+        data_type: text
+        nullable: true
+      can_write:
+        data_type: bool
+        nullable: true
+      endpoint:
+        data_type: text
+        nullable: true
+      request_time:
+        data_type: timestamp
+        nullable: true
+      request_params:
+        data_type: text
+        nullable: true
+      _dlt_load_id:
+        data_type: text
+        nullable: false
+      _dlt_id:
+        unique: true
+        data_type: text
+        nullable: false
+      archived:
+        data_type: bool
+        nullable: true
+      slug:
+        data_type: text
+        nullable: true
+      color:
+        data_type: text
+        nullable: true
+      personal_owner_id:
+        data_type: bigint
+        nullable: true
+      location:
+        data_type: text
+        nullable: true
+      description:
+        data_type: text
+        nullable: true
+    write_disposition: replace
+  dashboards:
+    columns:
+      archived:
+        data_type: bool
+        nullable: true
+      creator__email:
+        data_type: text
+        nullable: true
+      creator__first_name:
+        data_type: text
+        nullable: true
+      creator__last_login:
+        data_type: timestamp
+        nullable: true
+      creator__is_qbnewb:
+        data_type: bool
+        nullable: true
+      creator__is_superuser:
+        data_type: bool
+        nullable: true
+      creator__id:
+        data_type: bigint
+        nullable: true
+      creator__last_name:
+        data_type: text
+        nullable: true
+      creator__date_joined:
+        data_type: timestamp
+        nullable: true
+      creator__common_name:
+        data_type: text
+        nullable: true
+      enable_embedding:
+        data_type: bool
+        nullable: true
+      show_in_getting_started:
+        data_type: bool
+        nullable: true
+      name:
+        data_type: text
+        nullable: true
+      creator_id:
+        data_type: bigint
+        nullable: true
+      updated_at:
+        data_type: timestamp
+        nullable: true
+      id:
+        data_type: bigint
+        nullable: true
+      last_edit_info__id:
+        data_type: bigint
+        nullable: true
+      last_edit_info__email:
+        data_type: text
+        nullable: true
+      last_edit_info__first_name:
+        data_type: text
+        nullable: true
+      last_edit_info__last_name:
+        data_type: text
+        nullable: true
+      last_edit_info__timestamp:
+        data_type: timestamp
+        nullable: true
+      favorite:
+        data_type: bool
+        nullable: true
+      created_at:
+        data_type: timestamp
+        nullable: true
+      endpoint:
+        data_type: text
+        nullable: true
+      request_time:
+        data_type: timestamp
+        nullable: true
+      request_params:
+        data_type: text
+        nullable: true
+      _dlt_load_id:
+        data_type: text
+        nullable: false
+      _dlt_id:
+        unique: true
+        data_type: text
+        nullable: false
+      description:
+        data_type: text
+        nullable: true
+      collection_position:
+        data_type: bigint
+        nullable: true
+      collection_id:
+        data_type: bigint
+        nullable: true
+    write_disposition: replace
+  dashboards__parameters:
+    columns:
+      name:
+        data_type: text
+        nullable: true
+      slug:
+        data_type: text
+        nullable: true
+      id:
+        data_type: text
+        nullable: true
+      type:
+        data_type: text
+        nullable: true
+      section_id:
+        data_type: text
+        nullable: true
+      default:
+        data_type: text
+        nullable: true
+      _dlt_parent_id:
+        foreign_key: true
+        data_type: text
+        nullable: false
+      _dlt_list_idx:
+        data_type: bigint
+        nullable: false
+      _dlt_id:
+        unique: true
+        data_type: text
+        nullable: false
+      fields:
+        data_type: complex
+        nullable: true
+      field_ids:
+        data_type: complex
+        nullable: true
+      has_only_field_targets:
+        data_type: bool
+        nullable: true
+    parent: dashboards
+  databases:
+    columns:
+      cache_field_values_schedule:
+        data_type: text
+        nullable: true
+      timezone:
+        data_type: text
+        nullable: true
+      auto_run_queries:
+        data_type: bool
+        nullable: true
+      metadata_sync_schedule:
+        data_type: text
+        nullable: true
+      name:
+        data_type: text
+        nullable: true
+      is_full_sync:
+        data_type: bool
+        nullable: true
+      updated_at:
+        data_type: timestamp
+        nullable: true
+      native_permissions:
+        data_type: text
+        nullable: true
+      details__project_id_from_credentials:
+        data_type: text
+        nullable: true
+      details__db:
+        data_type: text
+        nullable: true
+      details__password:
+        data_type: text
+        nullable: true
+      details__dataset_id:
+        data_type: text
+        nullable: true
+      details__let_user_control_scheduling:
+        data_type: bool
+        nullable: true
+      details__port:
+        data_type: bigint
+        nullable: true
+      details__host:
+        data_type: text
+        nullable: true
+      details__tunnel_enabled:
+        data_type: bool
+        nullable: true
+      details__use_jvm_timezone:
+        data_type: bool
+        nullable: true
+      details__service_account_json:
+        data_type: text
+        nullable: true
+      details__project_id:
+        data_type: text
+        nullable: true
+      details__user:
+        data_type: text
+        nullable: true
+      details__include_user_id_and_hash:
+        data_type: bool
+        nullable: true
+      is_sample:
+        data_type: bool
+        nullable: true
+      id:
+        data_type: bigint
+        nullable: true
+      is_on_demand:
+        data_type: bool
+        nullable: true
+      engine:
+        data_type: text
+        nullable: true
+      refingerprint:
+        data_type: bool
+        nullable: true
+      created_at:
+        data_type: timestamp
+        nullable: true
+      endpoint:
+        data_type: text
+        nullable: true
+      request_time:
+        data_type: timestamp
+        nullable: true
+      request_params:
+        data_type: text
+        nullable: true
+      _dlt_load_id:
+        data_type: text
+        nullable: false
+      _dlt_id:
+        unique: true
+        data_type: text
+        nullable: false
+      details__dbname:
+        data_type: text
+        nullable: true
+      details__ssl:
+        data_type: bool
+        nullable: true
+    write_disposition: replace
+  databases__features:
+    columns:
+      value:
+        data_type: text
+        nullable: true
+      _dlt_id:
+        unique: true
+        data_type: text
+        nullable: false
+      _dlt_parent_id:
+        foreign_key: true
+        data_type: text
+        nullable: false
+      _dlt_list_idx:
+        data_type: bigint
+        nullable: false
+    parent: databases
+  metrics:
+    columns:
+      description:
+        data_type: text
+        nullable: true
+      archived:
+        data_type: bool
+        nullable: true
+      table_id:
+        data_type: bigint
+        nullable: true
+      definition__source_table:
+        data_type: bigint
+        nullable: true
+      definition__aggregation:
+        data_type: complex
+        nullable: true
+      creator__email:
+        data_type: text
+        nullable: true
+      creator__first_name:
+        data_type: text
+        nullable: true
+      creator__last_login:
+        data_type: timestamp
+        nullable: true
+      creator__is_qbnewb:
+        data_type: bool
+        nullable: true
+      creator__is_superuser:
+        data_type: bool
+        nullable: true
+      creator__id:
+        data_type: bigint
+        nullable: true
+      creator__last_name:
+        data_type: text
+        nullable: true
+      creator__date_joined:
+        data_type: timestamp
+        nullable: true
+      creator__common_name:
+        data_type: text
+        nullable: true
+      database_id:
+        data_type: bigint
+        nullable: true
+      show_in_getting_started:
+        data_type: bool
+        nullable: true
+      name:
+        data_type: text
+        nullable: true
+      creator_id:
+        data_type: bigint
+        nullable: true
+      updated_at:
+        data_type: timestamp
+        nullable: true
+      query_description__table:
+        data_type: text
+        nullable: true
+      query_description__aggregation:
+        data_type: complex
+        nullable: true
+      id:
+        data_type: bigint
+        nullable: true
+      created_at:
+        data_type: timestamp
+        nullable: true
+      endpoint:
+        data_type: text
+        nullable: true
+      request_time:
+        data_type: timestamp
+        nullable: true
+      request_params:
+        data_type: text
+        nullable: true
+      _dlt_load_id:
+        data_type: text
+        nullable: false
+      _dlt_id:
+        unique: true
+        data_type: text
+        nullable: false
+    write_disposition: replace
+  tables:
+    columns:
+      entity_type:
+        data_type: text
+        nullable: true
+      schema:
+        data_type: text
+        nullable: true
+      db__features:
+        data_type: complex
+        nullable: true
+      db__cache_field_values_schedule:
+        data_type: text
+        nullable: true
+      db__timezone:
+        data_type: text
+        nullable: true
+      db__auto_run_queries:
+        data_type: bool
+        nullable: true
+      db__metadata_sync_schedule:
+        data_type: text
+        nullable: true
+      db__name:
+        data_type: text
+        nullable: true
+      db__is_full_sync:
+        data_type: bool
+        nullable: true
+      db__updated_at:
+        data_type: timestamp
+        nullable: true
+      db__details:
+        data_type: complex
+        nullable: true
+      db__is_sample:
+        data_type: bool
+        nullable: true
+      db__id:
+        data_type: bigint
+        nullable: true
+      db__is_on_demand:
+        data_type: bool
+        nullable: true
+      db__engine:
+        data_type: text
+        nullable: true
+      db__created_at:
+        data_type: timestamp
+        nullable: true
+      show_in_getting_started:
+        data_type: bool
+        nullable: true
+      name:
+        data_type: text
+        nullable: true
+      updated_at:
+        data_type: timestamp
+        nullable: true
+      active:
+        data_type: bool
+        nullable: true
+      id:
+        data_type: bigint
+        nullable: true
+      db_id:
+        data_type: bigint
+        nullable: true
+      field_order:
+        data_type: text
+        nullable: true
+      display_name:
+        data_type: text
+        nullable: true
+      created_at:
+        data_type: timestamp
+        nullable: true
+      endpoint:
+        data_type: text
+        nullable: true
+      request_time:
+        data_type: timestamp
+        nullable: true
+      request_params:
+        data_type: text
+        nullable: true
+      _dlt_load_id:
+        data_type: text
+        nullable: false
+      _dlt_id:
+        unique: true
+        data_type: text
+        nullable: false
+      db__refingerprint:
+        data_type: bool
+        nullable: true
+      description:
+        data_type: text
+        nullable: true
+      visibility_type:
+        data_type: text
+        nullable: true
+    write_disposition: replace
+settings:
+  default_hints:
+    not_null:
+    - re:^_dlt_id$
+    - re:^_dlt_root_id$
+    - re:^_dlt_parent_id$
+    - re:^_dlt_list_idx$
+    - _dlt_load_id
+    foreign_key:
+    - re:^_dlt_parent_id$
+    unique:
+    - re:^_dlt_id$
+normalizers:
+  detections:
+  - timestamp
+  - iso_timestamp
+  names: dlt.common.normalizers.names.snake_case
+  json:
+    module: dlt.common.normalizers.json.relational
+    config:
+      max_nesting: 1
