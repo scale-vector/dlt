@@ -7,10 +7,28 @@ import json
 
 
 
-class MetabaseStatsApi:
+class MetabaseSource:
     _url: str = None
     _user: str = None
     _password: str = None
+
+    """  A list of tables that can be passed to get_table_rows() to get an interator of rows
+
+        Metabase publishes logs to a buffer that keeps a running window.
+        depending on how many events are generated in your instance,
+        you might want to schedule a read every few minutes or every few days.
+
+        They are set to "append-only" mode, so deduplication will be done by you by your optimal cost scenario
+    """
+    event_window_tables = ['activity', 'logs']
+
+    """ returns a list of available tasks (to get data sets).
+        pass them to get_endpoint_rows() to get an iterator of rows.
+        These are stateful and should be replaced
+    """
+    stateful_tables = ['stats', 'cards', 'collections', 'dashboards', 'databases',
+                  'metrics', 'pulses', 'tables', 'segments', 'users']
+
 
     def __init__(self, url: str, user: str, password: str) -> None:
         """
@@ -68,7 +86,7 @@ class MetabaseStatsApi:
         res = self.session.get(f"{self.url}/api/{endpoint}", params=params)
         request_time = time.time()
         res_json = res.json()
-        #print(json.dumps(res_json,        indent = 4, sort_keys = True))
+        #print(json.dumps(res_json, indent = 4, sort_keys = True))
 
         # if list
         if isinstance(res_json, list):
@@ -78,9 +96,6 @@ class MetabaseStatsApi:
                 data = res_json.get('data')
             else:
                 data = [res_json]
-        #print(data)
-        print(type(data))
-        print(data)
 
         #add metadata
         for d in data:
@@ -146,4 +161,33 @@ class MetabaseStatsApi:
             for row in data:
                 yield endpoint.get('table'), row
 
+    def get_field_data(self):
+        for p in self._get_fields_endpoints():
+            data = self._get_data(p)
+            for row in data:
+                yield row
+
+    def get_table_rows(self, table):
+        """this function returns an interator of rows"""
+        #if it's a simple call, we return the result in a list
+        simple_endpoints = [dict(endpoint='util/stats', table='stats'),
+                     dict(endpoint='card', table='cards'),
+                     dict(endpoint='collection', table='collections'),
+                     dict(endpoint='dashboard', table='dashboards'),
+                     dict(endpoint='database', table='databases'),
+                     dict(endpoint='metric', table='metrics'),
+                     dict(endpoint='pulse', table='pulses'),
+                     dict(endpoint='table', table='tables'),
+                     dict(endpoint='segment', table='segments'),
+                     dict(endpoint='user', table='users', params={'status': 'all'}),
+                     dict(endpoint='activity', table='activity'),
+                     dict(endpoint='util/logs', table='logs'),
+                     ]
+        if table in [e['table'] for e in simple_endpoints]:
+            data = self._get_data(simple_endpoints.get('endpoint'), params=simple_endpoints.get('params'))
+            return data
+
+        #for tables that need more calls, we return a generator
+        if table == 'fields':
+            return self.get_field_data()
 
