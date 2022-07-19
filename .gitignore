@@ -7,7 +7,8 @@ _test_storage
 **/_test_storage
 _secrets/
 _backup_storage/
-experiments
+experiments/*
+!experiments/spotify
 
 # Byte-compiled / optimized / DLL files
 **/__pycache__/

@@ -1,0 +1,177 @@
+version: 7
+engine_version: 3
+name: spotify
+tables:
+  _dlt_version:
+    columns:
+      version:
+        data_type: bigint
+        nullable: false
+      engine_version:
+        data_type: bigint
+        nullable: false
+      inserted_at:
+        data_type: timestamp
+        nullable: false
+    write_disposition: skip
+    description: Created by DLT. Tracks schema updates
+  _dlt_loads:
+    columns:
+      load_id:
+        data_type: text
+        nullable: false
+      status:
+        data_type: bigint
+        nullable: false
+      inserted_at:
+        data_type: timestamp
+        nullable: false
+    write_disposition: skip
+    description: Created by DLT. Tracks completed loads
+  playlist:
+    columns:
+      name:
+        data_type: text
+        nullable: true
+      last_modified_date:
+        data_type: timestamp
+        nullable: true
+      number_of_followers:
+        data_type: bigint
+        nullable: true
+      _dlt_load_id:
+        data_type: text
+        nullable: false
+      _dlt_id:
+        unique: true
+        data_type: text
+        nullable: false
+    write_disposition: append
+  playlist__items:
+    columns:
+      track__track_name:
+        data_type: text
+        nullable: true
+      track__artist_name:
+        data_type: text
+        nullable: true
+      track__album_name:
+        data_type: text
+        nullable: true
+      track__track_uri:
+        data_type: text
+        nullable: true
+      added_date:
+        data_type: text
+        nullable: true
+      _dlt_parent_id:
+        foreign_key: true
+        data_type: text
+        nullable: false
+      _dlt_list_idx:
+        data_type: bigint
+        nullable: false
+      _dlt_id:
+        unique: true
+        data_type: text
+        nullable: false
+    parent: playlist
+  search_queries:
+    columns:
+      platform:
+        data_type: text
+        nullable: true
+      search_time:
+        data_type: timestamp
+        nullable: true
+      search_query:
+        data_type: text
+        nullable: true
+      _dlt_load_id:
+        data_type: text
+        nullable: false
+      _dlt_id:
+        unique: true
+        data_type: text
+        nullable: false
+    write_disposition: append
+  search_queries__search_interaction_ur_is:
+    columns:
+      value:
+        data_type: text
+        nullable: true
+      _dlt_id:
+        unique: true
+        data_type: text
+        nullable: false
+      _dlt_parent_id:
+        foreign_key: true
+        data_type: text
+        nullable: false
+      _dlt_list_idx:
+        data_type: bigint
+        nullable: false
+    parent: search_queries
+  streaming_history:
+    columns:
+      end_time:
+        data_type: timestamp
+        nullable: true
+      artist_name:
+        data_type: text
+        nullable: true
+      track_name:
+        data_type: text
+        nullable: true
+      ms_played:
+        data_type: bigint
+        nullable: true
+      _dlt_load_id:
+        data_type: text
+        nullable: false
+      _dlt_id:
+        unique: true
+        data_type: text
+        nullable: false
+    write_disposition: append
+  your_library:
+    columns:
+      artist:
+        data_type: text
+        nullable: true
+      album:
+        data_type: text
+        nullable: true
+      track:
+        data_type: text
+        nullable: true
+      uri:
+        data_type: text
+        nullable: true
+      _dlt_load_id:
+        data_type: text
+        nullable: false
+      _dlt_id:
+        unique: true
+        data_type: text
+        nullable: false
+    write_disposition: append
+settings:
+  default_hints:
+    not_null:
+    - _dlt_id
+    - _dlt_root_id
+    - _dlt_parent_id
+    - _dlt_list_idx
+    - _dlt_load_id
+    foreign_key:
+    - _dlt_parent_id
+    unique:
+    - _dlt_id
+normalizers:
+  detections:
+  - timestamp
+  - iso_timestamp
+  names: dlt.common.normalizers.names.snake_case
+  json:
+    module: dlt.common.normalizers.json.relational
