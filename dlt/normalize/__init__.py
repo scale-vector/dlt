@@ -1,0 +1,1 @@
+from dlt._version import normalize_version as __version__

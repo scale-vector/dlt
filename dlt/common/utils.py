@@ -1,3 +1,4 @@
+from functools import wraps
 import os
 import base64
 from contextlib import contextmanager
@@ -6,7 +7,7 @@ from os import environ
 import secrets
 from typing import Any, Iterator, Optional, Sequence, TypeVar, Mapping, List, TypedDict, Union
 
-from dlt.common.typing import StrAny, DictStrAny, StrStr
+from dlt.common.typing import StrAny, DictStrAny, StrStr, TFun
 
 T = TypeVar("T")
 
@@ -135,6 +136,20 @@ def custom_environ(env: StrStr) -> Iterator[None]:
                 del os.environ[key]
             else:
                 os.environ[key] = value
+
+
+def with_custom_environ(f: TFun) -> TFun:
+
+        @wraps(f)
+        def _wrap(*args: Any, **kwargs: Any) -> Any:
+            saved_environ = os.environ.copy()
+            try:
+                return f(*args, **kwargs)
+            finally:
+                os.environ.clear()
+                os.environ.update(saved_environ)
+
+        return _wrap  # type: ignore
 
 
 def encoding_for_mode(mode: str) -> Optional[str]:

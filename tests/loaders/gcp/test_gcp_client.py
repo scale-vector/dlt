@@ -7,13 +7,13 @@ from dlt.common.arithmetics import numeric_default_context
 from dlt.common.file_storage import FileStorage
 from dlt.common.schema.schema import Schema
 from dlt.common.utils import uniq_id
-from dlt.loaders.exceptions import LoadJobNotExistsException, LoadJobServerTerminalException, LoadUnknownTableException
+from dlt.loaders.exceptions import LoadJobNotExistsException, LoadJobServerTerminalException
 
-from dlt.loaders.loader import import_client
+from dlt.loaders.loader import import_client_cls
 from dlt.loaders.gcp.client import BigQueryClient
 
 from tests.utils import TEST_STORAGE, delete_storage
-from tests.loaders.utils import TABLE_UPDATE, TABLE_ROW, expect_load_file, prepare_event_user_table, yield_client_with_storage
+from tests.loaders.utils import expect_load_file, prepare_event_user_table, yield_client_with_storage
 
 
 @pytest.fixture(scope="module")
@@ -33,16 +33,17 @@ def auto_delete_storage() -> None:
 
 def test_empty_schema_name_init_storage(client: BigQueryClient) -> None:
     e_client: BigQueryClient = None
-    with import_client("gcp").make_client(Schema(""), client.C) as e_client:
+    # will reuse same configuration
+    with import_client_cls("gcp", initial_values={"DEFAULT_DATASET": client.CONFIG.DEFAULT_DATASET})(Schema("")) as e_client:
         e_client.initialize_storage()
         try:
             # schema was created with the name of just schema prefix
-            assert e_client.sql_client.has_schema(client.C.DATASET)
+            assert e_client.sql_client.default_dataset_name == client.CONFIG.DEFAULT_DATASET
             # update schema
             e_client.update_storage_schema()
             assert e_client._get_schema_version_from_storage() == 1
         finally:
-            e_client.sql_client.drop_schema()
+            e_client.sql_client.drop_dataset()
 
 
 def test_bigquery_job_errors(client: BigQueryClient, file_storage: FileStorage) -> None:

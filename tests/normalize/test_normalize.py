@@ -7,43 +7,42 @@ from prometheus_client import CollectorRegistry
 from multiprocessing.dummy import Pool as ThreadPool
 
 from dlt.common import json
-from dlt.common.sources import with_table_name
 from dlt.common.utils import uniq_id
-from dlt.common.typing import StrAny, TEvent
-from dlt.common.normalizers.json.relational import TUnpackedRowIterator, normalize
+from dlt.common.typing import StrAny
+from dlt.common.normalizers.json.relational import normalize_data_item
 from dlt.common.file_storage import FileStorage
-from dlt.common.schema import TDataType, Schema
+from dlt.common.schema import TDataType
 from dlt.common.storages.loader_storage import LoaderStorage
-from dlt.common.storages.unpacker_storage import UnpackerStorage
+from dlt.common.storages.normalize_storage import NormalizeStorage
 from dlt.common.storages import SchemaStorage
 from dlt.extractors.extractor_storage import ExtractorStorageBase
 
-from dlt.unpacker import unpacker, __version__
+from dlt.normalize import normalize, __version__
 from tests.cases import JSON_TYPED_DICT, JSON_TYPED_DICT_TYPES
 
-from tests.unpacker.utils import json_case_path
+from tests.normalize.utils import json_case_path
 from tests.utils import TEST_STORAGE, assert_no_dict_key_starts_with, write_version, clean_storage, init_logger
 
 
 @pytest.fixture()
-def raw_unpacker() -> FileStorage:
+def raw_normalize() -> FileStorage:
     # does not install default schemas, so no type hints and row filters
     # uses default json normalizer that does not yield additional rasa tables
-    return init_unpacker()
+    return init_normalize()
 
 
 @pytest.fixture
-def rasa_unpacker() -> FileStorage:
+def rasa_normalize() -> FileStorage:
     # install default schemas, includes type hints and row filters
     # uses rasa json normalizer that yields event table and separate tables for event types
-    return init_unpacker("tests/unpacker/cases/schemas", ["event", "ethereum"])
+    return init_normalize("tests/normalize/cases/schemas", ["event", "ethereum"])
 
 
-def init_unpacker(default_schemas_path: str = None, schema_names: List[str] = None) -> FileStorage:
+def init_normalize(default_schemas_path: str = None, schema_names: List[str] = None) -> FileStorage:
     storage = clean_storage()
-    unpacker.configure(unpacker.configuration({"NAME": "test"}), CollectorRegistry(), default_schemas_path, schema_names)
+    normalize.configure(normalize.configuration(), CollectorRegistry(), default_schemas_path, schema_names)
     # set jsonl as default writer
-    unpacker.load_storage.writer_type = unpacker.CONFIG.WRITER_TYPE = "jsonl"
+    normalize.load_storage.preferred_file_format = normalize.CONFIG.LOADER_FILE_FORMAT = "jsonl"
     return storage
 
 
@@ -52,18 +51,18 @@ def logger_autouse() -> None:
     init_logger()
 
 
-def test_intialize(rasa_unpacker: FileStorage) -> None:
+def test_intialize(rasa_normalize: FileStorage) -> None:
     # create storages in fixture
     pass
 
 
-def test_empty_schema_name(raw_unpacker: FileStorage) -> None:
-    schema = unpacker.load_or_create_schema("")
+def test_empty_schema_name(raw_normalize: FileStorage) -> None:
+    schema = normalize.load_or_create_schema("")
     assert schema.schema_name == ""
 
 
-def test_unpack_single_user_event_jsonl(raw_unpacker: FileStorage) -> None:
-    expected_tables, load_files = unpack_event_user("event_user_load_1", EXPECTED_USER_TABLES)
+def test_normalize_single_user_event_jsonl(raw_normalize: FileStorage) -> None:
+    expected_tables, load_files = normalize_event_user("event_user_load_1", EXPECTED_USER_TABLES)
     # load, parse and verify jsonl
     for expected_table in expected_tables:
         expect_lines_file(load_files[expected_table])
@@ -82,9 +81,9 @@ def test_unpack_single_user_event_jsonl(raw_unpacker: FileStorage) -> None:
     assert "intent_response_key" in event_json
 
 
-def test_unpack_single_user_event_insert(raw_unpacker: FileStorage) -> None:
-    unpacker.load_storage.writer_type = unpacker.CONFIG.WRITER_TYPE = "insert_values"
-    expected_tables, load_files = unpack_event_user("event_user_load_1", EXPECTED_USER_TABLES)
+def test_normalize_single_user_event_insert(raw_normalize: FileStorage) -> None:
+    normalize.load_storage.preferred_file_format = normalize.CONFIG.LOADER_FILE_FORMAT = "insert_values"
+    expected_tables, load_files = normalize_event_user("event_user_load_1", EXPECTED_USER_TABLES)
     # verify values line
     for expected_table in expected_tables:
         expect_lines_file(load_files[expected_table])
@@ -99,8 +98,8 @@ def test_unpack_single_user_event_insert(raw_unpacker: FileStorage) -> None:
     assert "(7005479104644416710," in event_text
 
 
-def test_unpack_filter_user_event(rasa_unpacker: FileStorage) -> None:
-    load_id = unpack_cases(["event_user_load_v228_1"])
+def test_normalize_filter_user_event(rasa_normalize: FileStorage) -> None:
+    load_id = normalize_cases(["event_user_load_v228_1"])
     load_files = expect_load_package(load_id, ["event", "event_user", "event_user__metadata__user_nicknames",
                                                "event_user__parse_data__entities", "event_user__parse_data__entities__processors", "event_user__parse_data__intent_ranking"])
     event_text, lines = expect_lines_file(load_files["event_user"], 0)
@@ -111,8 +110,8 @@ def test_unpack_filter_user_event(rasa_unpacker: FileStorage) -> None:
     assert_no_dict_key_starts_with(filtered_row, "parse_data__response_selector")
 
 
-def test_unpack_filter_bot_event(rasa_unpacker: FileStorage) -> None:
-    load_id = unpack_cases(["event_bot_load_metadata_1"])
+def test_normalize_filter_bot_event(rasa_normalize: FileStorage) -> None:
+    load_id = normalize_cases(["event_bot_load_metadata_1"])
     load_files = expect_load_package(load_id, ["event", "event_bot"])
     event_text, lines = expect_lines_file(load_files["event_bot"], 0)
     assert lines == 1
@@ -121,9 +120,8 @@ def test_unpack_filter_bot_event(rasa_unpacker: FileStorage) -> None:
     assert "metadata__account_balance" not in filtered_row
 
 
-def test_preserve_slot_complex_value_json_l(rasa_unpacker: FileStorage) -> None:
-    # unpacker.load_storage.writer_type = unpacker.CONFIG.WRITER_TYPE = "insert_values"
-    load_id = unpack_cases(["event_slot_session_metadata_1"])
+def test_preserve_slot_complex_value_json_l(rasa_normalize: FileStorage) -> None:
+    load_id = normalize_cases(["event_slot_session_metadata_1"])
     load_files = expect_load_package(load_id, ["event", "event_slot"])
     event_text, lines = expect_lines_file(load_files["event_slot"], 0)
     assert lines == 1
@@ -135,9 +133,9 @@ def test_preserve_slot_complex_value_json_l(rasa_unpacker: FileStorage) -> None:
         })
 
 
-def test_preserve_slot_complex_value_insert(rasa_unpacker: FileStorage) -> None:
-    unpacker.load_storage.writer_type = unpacker.CONFIG.WRITER_TYPE = "insert_values"
-    load_id = unpack_cases(["event_slot_session_metadata_1"])
+def test_preserve_slot_complex_value_insert(rasa_normalize: FileStorage) -> None:
+    normalize.load_storage.preferred_file_format = normalize.CONFIG.LOADER_FILE_FORMAT = "insert_values"
+    load_id = normalize_cases(["event_slot_session_metadata_1"])
     load_files = expect_load_package(load_id, ["event", "event_slot"])
     event_text, lines = expect_lines_file(load_files["event_slot"], 2)
     assert lines == 3
@@ -148,19 +146,19 @@ def test_preserve_slot_complex_value_insert(rasa_unpacker: FileStorage) -> None:
     assert c_val in event_text
 
 
-def test_unpack_raw_no_type_hints(raw_unpacker: FileStorage) -> None:
-    unpack_event_user("event_user_load_1", EXPECTED_USER_TABLES)
+def test_normalize_raw_no_type_hints(raw_normalize: FileStorage) -> None:
+    normalize_event_user("event_user_load_1", EXPECTED_USER_TABLES)
     assert_timestamp_data_type("double")
 
 
-def test_unpack_raw_type_hints(rasa_unpacker: FileStorage) -> None:
-    unpack_cases(["event_user_load_1"])
+def test_normalize_raw_type_hints(rasa_normalize: FileStorage) -> None:
+    normalize_cases(["event_user_load_1"])
     assert_timestamp_data_type("timestamp")
 
 
-def test_unpack_many_events_insert(rasa_unpacker: FileStorage) -> None:
-    unpacker.load_storage.writer_type = unpacker.CONFIG.WRITER_TYPE = "insert_values"
-    load_id = unpack_cases(["event_many_load_2", "event_user_load_1"])
+def test_normalize_many_events_insert(rasa_normalize: FileStorage) -> None:
+    normalize.load_storage.preferred_file_format = normalize.CONFIG.LOADER_FILE_FORMAT = "insert_values"
+    load_id = normalize_cases(["event_many_load_2", "event_user_load_1"])
     expected_tables = EXPECTED_USER_TABLES_RASA_NORMALIZER + ["event_bot", "event_action"]
     load_files = expect_load_package(load_id, expected_tables)
     # return first values line from event_user file
@@ -169,18 +167,18 @@ def test_unpack_many_events_insert(rasa_unpacker: FileStorage) -> None:
     assert f"'{load_id}'" in event_text
 
 
-def test_unpack_many_schemas(rasa_unpacker: FileStorage) -> None:
-    unpacker.load_storage.writer_type = unpacker.CONFIG.WRITER_TYPE = "insert_values"
+def test_normalize_many_schemas(rasa_normalize: FileStorage) -> None:
+    normalize.load_storage.preferred_file_format = normalize.CONFIG.LOADER_FILE_FORMAT = "insert_values"
     copy_cases(["event_many_load_2", "event_user_load_1", "ethereum_blocks_9c1d9b504ea240a482b007788d5cd61c_2"])
-    unpacker.unpack(ThreadPool(processes=1))
+    normalize.normalize(ThreadPool(processes=1))
     # must have two loading groups with model and event schemas
-    loads = unpacker.load_storage.list_loads()
+    loads = normalize.load_storage.list_loads()
     assert len(loads) == 2
-    schema_storage = SchemaStorage(unpacker.load_storage.storage.storage_path)
+    schema_storage = SchemaStorage(normalize.load_storage.storage.storage_path)
     schemas = []
     # load all schemas
     for load_id in loads:
-        schema = schema_storage.load_folder_schema(unpacker.load_storage.get_load_path(load_id))
+        schema = schema_storage.load_folder_schema(normalize.load_storage.get_load_path(load_id))
         schemas.append(schema.schema_name)
         # expect event tables
         if schema.schema_name == "event":
@@ -191,15 +189,15 @@ def test_unpack_many_schemas(rasa_unpacker: FileStorage) -> None:
     assert set(schemas) == set(["ethereum", "event"])
 
 
-def test_unpack_typed_json(raw_unpacker: FileStorage) -> None:
-    unpacker.load_storage.writer_type = unpacker.CONFIG.WRITER_TYPE = "jsonl"
+def test_normalize_typed_json(raw_normalize: FileStorage) -> None:
+    normalize.load_storage.preferred_file_format = normalize.CONFIG.LOADER_FILE_FORMAT = "jsonl"
     extract_items([JSON_TYPED_DICT], "special")
-    unpacker.unpack(ThreadPool(processes=1))
-    loads = unpacker.load_storage.list_loads()
+    normalize.normalize(ThreadPool(processes=1))
+    loads = normalize.load_storage.list_loads()
     assert len(loads) == 1
-    schema_storage = SchemaStorage(unpacker.load_storage.storage.storage_path)
+    schema_storage = SchemaStorage(normalize.load_storage.storage.storage_path)
     # load all schemas
-    schema = schema_storage.load_folder_schema(unpacker.load_storage.get_load_path(loads[0]))
+    schema = schema_storage.load_folder_schema(normalize.load_storage.get_load_path(loads[0]))
     assert schema.schema_name == "special"
     # named as schema - default fallback
     table = schema.get_table_columns("special")
@@ -220,7 +218,7 @@ EXPECTED_USER_TABLES = ["event", "event__parse_data__intent_ranking", "event__pa
 
 
 def extract_items(items: Sequence[StrAny], schema_name: str) -> None:
-    extractor = ExtractorStorageBase("1.0.0", True, FileStorage(os.path.join(TEST_STORAGE, "extractor"), makedirs=True), unpacker.unpack_storage)
+    extractor = ExtractorStorageBase("1.0.0", True, FileStorage(os.path.join(TEST_STORAGE, "extractor"), makedirs=True), normalize.normalize_storage)
     load_id = uniq_id()
     extractor.save_json(f"{load_id}.json", items)
     extractor.commit_events(
@@ -231,36 +229,36 @@ def extract_items(items: Sequence[StrAny], schema_name: str) -> None:
         load_id
     )
 
-def unpack_event_user(case: str, expected_user_tables: List[str] = None) -> None:
+def normalize_event_user(case: str, expected_user_tables: List[str] = None) -> None:
     expected_user_tables = expected_user_tables or EXPECTED_USER_TABLES_RASA_NORMALIZER
-    load_id = unpack_cases([case])
+    load_id = normalize_cases([case])
     return expected_user_tables, expect_load_package(load_id, expected_user_tables)
 
 
-def unpack_cases(cases: Sequence[str]) -> str:
+def normalize_cases(cases: Sequence[str]) -> str:
     copy_cases(cases)
     load_id = uniq_id()
-    unpacker.load_storage.create_temp_load_folder(load_id)
+    normalize.load_storage.create_temp_load_folder(load_id)
     # pool not required for map_single
-    dest_cases = [f"{UnpackerStorage.UNPACKING_FOLDER}/{c}.unpack.json" for c in cases]
+    dest_cases = [f"{NormalizeStorage.EXTRACTED_FOLDER}/{c}.extracted.json" for c in cases]
     # create schema if it does not exist
-    unpacker.load_or_create_schema("event")
-    unpacker.spool_files(None, "event", load_id, unpacker.map_single, dest_cases)
+    normalize.load_or_create_schema("event")
+    normalize.spool_files(None, "event", load_id, normalize.map_single, dest_cases)
     return load_id
 
 
 def copy_cases(cases: Sequence[str]) -> None:
     for case in cases:
-        event_user_path = json_case_path(f"{case}.unpack")
-        shutil.copy(event_user_path, unpacker.unpack_storage.storage._make_path(UnpackerStorage.UNPACKING_FOLDER))
+        event_user_path = json_case_path(f"{case}.extracted")
+        shutil.copy(event_user_path, normalize.normalize_storage.storage._make_path(NormalizeStorage.EXTRACTED_FOLDER))
 
 
 def expect_load_package(load_id: str, expected_tables: Sequence[str]) -> Dict[str, str]:
-    files = unpacker.load_storage.list_new_jobs(load_id)
+    files = normalize.load_storage.list_new_jobs(load_id)
     assert len(files) == len(expected_tables)
     ofl: Dict[str, str] = {}
     for expected_table in expected_tables:
-        file_mask = unpacker.load_storage.build_loading_file_name(load_id, expected_table, "*")
+        file_mask = normalize.load_storage.build_loading_file_name(load_id, expected_table, "*")
         candidates = [f for f in files if fnmatch(f, f"{LoaderStorage.LOADING_FOLDER}/{file_mask}")]
         assert len(candidates) == 1
         ofl[expected_table] = candidates[0]
@@ -268,19 +266,19 @@ def expect_load_package(load_id: str, expected_tables: Sequence[str]) -> Dict[st
 
 
 def expect_lines_file(load_file: str, line: int = 0) -> str:
-    with unpacker.load_storage.storage.open_file(load_file) as f:
+    with normalize.load_storage.storage.open_file(load_file) as f:
         lines = f.readlines()
     return lines[line], len(lines)
 
 
 def assert_timestamp_data_type(data_type: TDataType) -> None:
     # load generated schema
-    schema_storage = SchemaStorage(unpacker.load_storage.storage.storage_path)
-    loads = unpacker.load_storage.list_loads()
-    event_schema = schema_storage.load_folder_schema(unpacker.load_storage.get_load_path(loads[0]))
-    # in raw unpacker timestamp column must not be coerced to timestamp
+    schema_storage = SchemaStorage(normalize.load_storage.storage.storage_path)
+    loads = normalize.load_storage.list_loads()
+    event_schema = schema_storage.load_folder_schema(normalize.load_storage.get_load_path(loads[0]))
+    # in raw normalize timestamp column must not be coerced to timestamp
     assert event_schema.get_table_columns("event")["timestamp"]["data_type"] == data_type
 
 
 def test_version() -> None:
-    assert unpacker.configuration({"NAME": "test"})._VERSION == __version__
+    assert normalize.configuration()._VERSION == __version__

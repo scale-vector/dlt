@@ -9,7 +9,7 @@ from dlt.common.exceptions import DictValidationException
 from dlt.common.schema.typing import TColumnName, TSimpleRegex
 from dlt.common.typing import DictStrAny, StrAny
 from dlt.common.utils import uniq_id
-from dlt.common.schema import TColumn, Schema, TStoredSchema, utils
+from dlt.common.schema import TColumnSchema, Schema, TStoredSchema, utils
 from dlt.common.schema.exceptions import InvalidSchemaName, ParentTableNotFoundException, SchemaEngineNoUpgradePathException
 from dlt.common.storages import SchemaStorage
 
@@ -194,7 +194,7 @@ def test_unknown_engine_upgrade() -> None:
 
 def test_preserve_column_order(schema: Schema) -> None:
     # python dicts are ordered from v3.6, add 50 column with random names
-    update: List[TColumn] = [schema._infer_column(uniq_id(), pendulum.now().timestamp()) for _ in range(50)]
+    update: List[TColumnSchema] = [schema._infer_column(uniq_id(), pendulum.now().timestamp()) for _ in range(50)]
     schema.update_schema(utils.new_table("event_test_order", columns=update))
 
     def verify_items(table, update) -> None:
@@ -209,7 +209,7 @@ def test_preserve_column_order(schema: Schema) -> None:
     table = loaded_schema.get_table_columns("event_test_order")
     verify_items(table, update)
     # add more columns
-    update2: List[TColumn] = [schema._infer_column(uniq_id(), pendulum.now().timestamp()) for _ in range(50)]
+    update2: List[TColumnSchema] = [schema._infer_column(uniq_id(), pendulum.now().timestamp()) for _ in range(50)]
     loaded_schema.update_schema(utils.new_table("event_test_order", columns=update2))
     table = loaded_schema.get_table_columns("event_test_order")
     verify_items(table, update + update2)
@@ -394,7 +394,7 @@ def assert_new_schema_values_custom_normalizers(schema: Schema) -> None:
     # assumes elements are normalized
     assert schema.normalize_make_path("A", "B", "!C") == "A__B__!C"
     assert schema.normalize_break_path("A__B__!C") == ["A", "B", "!C"]
-    row = list(schema.normalize_json(schema, {"bool": True}, "load_id"))
+    row = list(schema.normalize_data_item(schema, {"bool": True}, "load_id"))
     assert row[0] == (("table", None), {"bool": True})
 
 
@@ -414,7 +414,7 @@ def assert_new_schema_values(schema: Schema) -> None:
     # assumes elements are normalized
     assert schema.normalize_make_path("A", "B", "!C") == "A__B__!C"
     assert schema.normalize_break_path("A__B__!C") == ["A", "B", "!C"]
-    schema.normalize_json(schema, {}, "load_id")
+    schema.normalize_data_item(schema, {}, "load_id")
     # check default tables
     tables = schema.schema_tables
     assert "_dlt_version" in tables

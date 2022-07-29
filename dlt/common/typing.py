@@ -16,15 +16,9 @@ StrAny = Mapping[str, Any]  # immutable, covariant entity
 StrStr = Mapping[str, str]  # immutable, covariant entity
 StrStrStr = Mapping[str, Mapping[str, str]]  # immutable, covariant entity
 TFun = TypeVar("TFun", bound=Callable[..., Any])
+TAny = TypeVar("TAny", bound=Any)
 TSecretValue = NewType("TSecretValue", str)  # represent secret value ie. coming from Kubernetes/Docker secrets or other providers
-
-
-class TEvent(TypedDict, total=False):
-    pass
-
-
-class TTimestampEvent(TEvent, total=False):
-    timestamp: float  # timestamp of event
+TDataItem = DictStrAny
 
 
 def is_optional_type(t: Type[Any]) -> bool:

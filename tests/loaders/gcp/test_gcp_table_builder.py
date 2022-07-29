@@ -8,12 +8,10 @@ from dlt.common.schema import Schema
 from dlt.common.schema.utils import new_table
 from dlt.common.configuration import make_configuration, GcpClientConfiguration
 
-from dlt.loaders.configuration import configuration
 from dlt.loaders.gcp.client import BigQueryClient
 from dlt.loaders.exceptions import LoadClientSchemaWillNotUpdate
 
 from tests.loaders.utils import TABLE_UPDATE
-
 
 
 @pytest.fixture
@@ -35,9 +33,8 @@ def test_configuration() -> None:
 @pytest.fixture
 def gcp_client(schema: Schema) -> BigQueryClient:
     # return client without opening connection
-    CLIENT_CONFIG: GcpClientConfiguration = configuration({"CLIENT_TYPE": "gcp"})
-    CLIENT_CONFIG.DATASET = uniq_id()
-    return BigQueryClient(schema, CLIENT_CONFIG)
+    BigQueryClient.configure(initial_values={"DEFAULT_DATASET": uniq_id()})
+    return BigQueryClient(schema)
 
 
 def test_create_table(gcp_client: BigQueryClient) -> None:

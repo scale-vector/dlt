@@ -7,13 +7,13 @@ if __name__ == '__main__':
     pipeline = Pipeline("ethereum")
     # restore pipeline from the working directory
     # working directory contains pipeline full state after it was created
-    # it is possible to restore pipeline in many concurrently running components ie. several extractors, separate unpacker and loader
+    # it is possible to restore pipeline in many concurrently running components ie. several extractors, separate normalize and load
     # pipeline.restore_pipeline(credentials, "/tmp/tmp724aveoc/")
     pipeline.restore_pipeline(credentials, "/tmp/tmpswbi3v0o/")
 
-    # the code below will unpack and load anything that was extracted by extractor process(es)
+    # the code below will normalize and load anything that was extracted by extractor process(es)
 
-    # do we have anything to unpack
+    # do we have anything to normalize
     print(pipeline.list_extracted_loads())
 
     # just finalize

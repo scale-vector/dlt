@@ -6,7 +6,7 @@ from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Any, cast
 from dlt.common.typing import DictStrAny, StrAny, REPattern
 from dlt.common.normalizers.names import TNormalizeBreakPath, TNormalizeMakePath, TNormalizeNameFunc
 from dlt.common.normalizers.json import TNormalizeJSONFunc
-from dlt.common.schema.typing import TNormalizersConfig, TPartialTable, TSchemaSettings, TSimpleRegex, TStoredSchema, TSchemaTables, TTable, TTableColumns, TColumn, TColumnProp, TDataType, THintType, TWriteDisposition
+from dlt.common.schema.typing import TNormalizersConfig, TPartialTableSchema, TSchemaSettings, TSimpleRegex, TStoredSchema, TSchemaTables, TTableSchema, TTableSchemaColumns, TColumnSchema, TColumnProp, TDataType, THintType, TWriteDisposition
 from dlt.common.schema import utils
 from dlt.common.schema.exceptions import (CannotCoerceColumnException, CannotCoerceNullException, InvalidSchemaName,
                                           ParentTableNotFoundException, SchemaCorruptedException, TablePropertiesClashException)
@@ -45,11 +45,11 @@ class Schema:
         self.normalize_table_name: TNormalizeNameFunc = None
         self.normalize_column_name: TNormalizeNameFunc = None
         self.normalize_schema_name: TNormalizeNameFunc = None
-        self.normalize_make_schema_name: TNormalizeMakePath = None
+        self.normalize_make_dataset_name: TNormalizeMakePath = None
         self.normalize_make_path: TNormalizeMakePath = None
         self.normalize_break_path: TNormalizeBreakPath = None
         # json normalization function
-        self.normalize_json: TNormalizeJSONFunc = None
+        self.normalize_data_item: TNormalizeJSONFunc = None
 
         # add version tables
         self._add_standard_tables()
@@ -121,12 +121,12 @@ class Schema:
                 break
         return row
 
-    def coerce_row(self, table_name: str, parent_table: str, row: StrAny) -> Tuple[StrAny, TPartialTable]:
+    def coerce_row(self, table_name: str, parent_table: str, row: StrAny) -> Tuple[StrAny, TPartialTableSchema]:
         # get existing or create a new table
         table = self._schema_tables.get(table_name, utils.new_table(table_name, parent_table))
         table_columns = table["columns"]
 
-        partial_table: TPartialTable = None
+        partial_table: TPartialTableSchema = None
         new_row: DictStrAny = {}
         for col_name, v in row.items():
             # skip None values, we should infer the types later
@@ -144,7 +144,7 @@ class Schema:
 
         return new_row, partial_table
 
-    def update_schema(self, partial_table: TPartialTable) -> None:
+    def update_schema(self, partial_table: TPartialTableSchema) -> None:
         table_name = partial_table["name"]
         parent_table_name = partial_table.get("parent")
         # check if parent table present
@@ -211,22 +211,22 @@ class Schema:
                 default_hints[h] = l  # type: ignore
         self._compile_regexes()
 
-    def get_schema_update_for(self, table_name: str, t: TTableColumns) -> List[TColumn]:
+    def get_schema_update_for(self, table_name: str, t: TTableSchemaColumns) -> List[TColumnSchema]:
         # gets new columns to be added to "t" to bring up to date with stored schema
-        diff_c: List[TColumn] = []
+        diff_c: List[TColumnSchema] = []
         s_t = self.get_table_columns(table_name)
         for c in s_t.values():
             if c["name"] not in t:
                 diff_c.append(c)
         return diff_c
 
-    def get_table(self, table_name: str) -> TTable:
+    def get_table(self, table_name: str) -> TTableSchema:
         return self._schema_tables[table_name]
 
-    def get_table_columns(self, table_name: str) -> TTableColumns:
+    def get_table_columns(self, table_name: str) -> TTableSchemaColumns:
         return self._schema_tables[table_name]["columns"]
 
-    def all_tables(self, with_dlt_tables: bool = False) -> List[TTable]:
+    def all_tables(self, with_dlt_tables: bool = False) -> List[TTableSchema]:
         return [t for t in self._schema_tables.values() if not t["name"].startswith("_dlt") or with_dlt_tables]
 
     def get_write_disposition(self, table_name: str) -> TWriteDisposition:
@@ -272,8 +272,8 @@ class Schema:
         d = self.to_dict(remove_defaults=remove_defaults)
         return cast(str, yaml.dump(d, allow_unicode=True, default_flow_style=False, sort_keys=False))
 
-    def _infer_column(self, k: str, v: Any) -> TColumn:
-        return TColumn(
+    def _infer_column(self, k: str, v: Any) -> TColumnSchema:
+        return TColumnSchema(
             name=k,
             data_type=self._map_value_to_column_type(v, k),
             nullable=not self._infer_hint("not_null", v, k),
@@ -285,14 +285,14 @@ class Schema:
             foreign_key=self._infer_hint("foreign_key", v, k)
         )
 
-    def _coerce_null_value(self, table_columns: TTableColumns, table_name: str, col_name: str) -> None:
+    def _coerce_null_value(self, table_columns: TTableSchemaColumns, table_name: str, col_name: str) -> None:
         if col_name in table_columns:
             existing_column = table_columns[col_name]
             if not existing_column["nullable"]:
                 raise CannotCoerceNullException(table_name, col_name)
 
-    def _coerce_non_null_value(self, table_columns: TTableColumns, table_name: str, col_name: str, v: Any) -> Tuple[str, TColumn, Any]:
-        new_column: TColumn = None
+    def _coerce_non_null_value(self, table_columns: TTableSchemaColumns, table_name: str, col_name: str, v: Any) -> Tuple[str, TColumnSchema, Any]:
+        new_column: TColumnSchema = None
         variant_col_name = col_name
 
         if col_name in table_columns:
@@ -372,11 +372,11 @@ class Schema:
         self.normalize_table_name = naming_module.normalize_table_name
         self.normalize_column_name = naming_module.normalize_column_name
         self.normalize_schema_name = utils.normalize_schema_name
-        self.normalize_make_schema_name = naming_module.normalize_make_schema_name
+        self.normalize_make_dataset_name = naming_module.normalize_make_dataset_name
         self.normalize_make_path = naming_module.normalize_make_path
         self.normalize_break_path = naming_module.normalize_break_path
-        # json normalization function
-        self.normalize_json = json_module.normalize
+        # data item normalization function
+        self.normalize_data_item = json_module.normalize_data_item
         json_module.extend_schema(self)
 
     def _compile_regexes(self) -> None:
@@ -394,3 +394,6 @@ class Schema:
                         self._compiled_excludes[table["name"]] = list(map(lambda exclude: utils.compile_simple_regex(exclude), table["filters"]["excludes"]))
                     if "includes" in table["filters"]:
                         self._compiled_includes[table["name"]] = list(map(lambda exclude: utils.compile_simple_regex(exclude), table["filters"]["includes"]))
+
+    def __repr__(self) -> str:
+        return f"Schema {self.schema_name} at {id(self)}"

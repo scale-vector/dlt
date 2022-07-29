@@ -39,9 +39,9 @@ def normalize_column_name(name: str) -> str:
     return RE_UNDERSCORES.sub("_", normalize_table_name(name))
 
 
-# build full db schema name out of (normalized) schema prefix and schema name
-def normalize_make_schema_name(schema_prefix: str, schema_name: str) -> str:
-    name = normalize_column_name(schema_prefix)
+# build full db dataset (dataset) name out of (normalized) default dataset and schema name
+def normalize_make_dataset_name(default_dataset: str, schema_name: str) -> str:
+    name = normalize_column_name(default_dataset)
     if schema_name:
         name += "_" + schema_name
 

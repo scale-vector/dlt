@@ -1,8 +1,8 @@
 import pytest
 
 from dlt.common.storages.exceptions import NoMigrationPathException
-from dlt.common.storages.unpacker_storage import UnpackerStorage
-from dlt.common.configuration import UnpackingVolumeConfiguration
+from dlt.common.storages.normalize_storage import NormalizeStorage
+from dlt.common.configuration import NormalizeVolumeConfiguration
 from dlt.common.utils import uniq_id
 
 from tests.utils import write_version, autouse_root_storage
@@ -19,33 +19,33 @@ def test_chunk_by_events() -> None:
     pass
 
 
-def test_build_unpack_file_name() -> None:
+def test_build_extracted_file_name() -> None:
     load_id = uniq_id()
-    name = UnpackerStorage.build_unpack_file_name("event", "table", 121, load_id)
-    assert UnpackerStorage.get_schema_name(name) == "event"
-    assert UnpackerStorage.get_events_count(name) == 121
-    assert UnpackerStorage._parse_unpack_file_name(name) == (121, load_id, "event")
+    name = NormalizeStorage.build_extracted_file_name("event", "table", 121, load_id)
+    assert NormalizeStorage.get_schema_name(name) == "event"
+    assert NormalizeStorage.get_events_count(name) == 121
+    assert NormalizeStorage._parse_extracted_file_name(name) == (121, load_id, "event")
 
     # empty schema should be supported
-    name = UnpackerStorage.build_unpack_file_name("", "table", 121, load_id)
-    assert UnpackerStorage._parse_unpack_file_name(name) == (121, load_id, "")
+    name = NormalizeStorage.build_extracted_file_name("", "table", 121, load_id)
+    assert NormalizeStorage._parse_extracted_file_name(name) == (121, load_id, "")
 
 
 def test_full_migration_path() -> None:
     # create directory structure
-    s = UnpackerStorage(True, UnpackingVolumeConfiguration)
+    s = NormalizeStorage(True, NormalizeVolumeConfiguration)
     # overwrite known initial version
     write_version(s.storage, "1.0.0")
     # must be able to migrate to current version
-    s = UnpackerStorage(True, UnpackingVolumeConfiguration)
-    assert s.version == UnpackerStorage.STORAGE_VERSION
+    s = NormalizeStorage(True, NormalizeVolumeConfiguration)
+    assert s.version == NormalizeStorage.STORAGE_VERSION
 
 
 def test_unknown_migration_path() -> None:
     # create directory structure
-    s = UnpackerStorage(True, UnpackingVolumeConfiguration)
+    s = NormalizeStorage(True, NormalizeVolumeConfiguration)
     # overwrite known initial version
     write_version(s.storage, "10.0.0")
     # must be able to migrate to current version
     with pytest.raises(NoMigrationPathException):
-        UnpackerStorage(False, UnpackingVolumeConfiguration)
+        NormalizeStorage(False, NormalizeVolumeConfiguration)

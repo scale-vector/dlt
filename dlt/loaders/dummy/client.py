@@ -1,18 +1,20 @@
 import random
 from types import TracebackType
 from typing import Dict, Literal, Type
-from dlt.common.dataset_writers import TWriterType
+from dlt.common.dataset_writers import TLoaderFileFormat
 
 from dlt.common import pendulum
 from dlt.common.schema import Schema
-from dlt.common.schema.typing import TTable
+from dlt.common.schema.typing import TTableSchema
+from dlt.common.storages.loader_storage import LoaderStorage
+from dlt.common.typing import StrAny
 
-from dlt.loaders.client_base import JobClientBase, LoadJob, TJobClientCapabilities
-from dlt.loaders.local_types import LoadJobStatus
+from dlt.loaders.client_base import JobClientBase, LoadJob, TLoaderCapabilities
+from dlt.loaders.typing import LoadJobStatus
 from dlt.loaders.exceptions import (LoadJobNotExistsException, LoadJobInvalidStateTransitionException,
                                             LoadClientTerminalException, LoadClientTransientException)
 
-from dlt.loaders.dummy.configuration import DummyClientConfiguration
+from dlt.loaders.dummy.configuration import DummyClientConfiguration, configuration
 
 
 class LoadDummyJob(LoadJob):
@@ -76,8 +78,9 @@ class DummyClient(JobClientBase):
     """
     dummy client storing jobs in memory
     """
-    def __init__(self, schema: Schema, CONFIG: Type[DummyClientConfiguration]) -> None:
-        self.C = CONFIG
+    CONFIG: Type[DummyClientConfiguration] = None
+
+    def __init__(self, schema: Schema) -> None:
         super().__init__(schema)
 
     def initialize_storage(self) -> None:
@@ -86,7 +89,7 @@ class DummyClient(JobClientBase):
     def update_storage_schema(self) -> None:
         pass
 
-    def start_file_load(self, table: TTable, file_path: str) -> LoadJob:
+    def start_file_load(self, table: TTableSchema, file_path: str) -> LoadJob:
         job_id = JobClientBase.get_file_name_from_file_path(file_path)
         file_name = JobClientBase.get_file_name_from_file_path(file_path)
         # return existing job if already there
@@ -108,12 +111,6 @@ class DummyClient(JobClientBase):
     def complete_load(self, load_id: str) -> None:
         pass
 
-    @property
-    def capabilities(self) -> TJobClientCapabilities:
-        return {
-            "writer_type": supported_writer(self.C)
-        }
-
     def __enter__(self) -> "DummyClient":
         return self
 
@@ -123,17 +120,23 @@ class DummyClient(JobClientBase):
     def _create_job(self, job_id: str) -> LoadDummyJob:
         return LoadDummyJob(
             job_id,
-            fail_prob=self.C.FAIL_PROB,
-            retry_prob=self.C.RETRY_PROB,
-            completed_prob=self.C.COMPLETED_PROB,
-            timeout=self.C.TIMEOUT
+            fail_prob=self.CONFIG.FAIL_PROB,
+            retry_prob=self.CONFIG.RETRY_PROB,
+            completed_prob=self.CONFIG.COMPLETED_PROB,
+            timeout=self.CONFIG.TIMEOUT
             )
 
+    @classmethod
+    def capabilities(cls) -> TLoaderCapabilities:
+        return {
+            "preferred_loader_file_format": cls.CONFIG.LOADER_FILE_FORMAT,
+            "supported_loader_file_formats": [cls.CONFIG.LOADER_FILE_FORMAT]
+        }
+
+    @classmethod
+    def configure(cls, initial_values: StrAny = None) -> Type[DummyClientConfiguration]:
+        cls.CONFIG = configuration(initial_values=initial_values)
+        return cls.CONFIG
 
 
-def make_client(schema: Schema, C: Type[DummyClientConfiguration]) -> JobClientBase:
-    return DummyClient(schema, C)
-
-
-def supported_writer(C: Type[DummyClientConfiguration]) -> TWriterType:
-    return C.WRITER_TYPE
+CLIENT = DummyClient

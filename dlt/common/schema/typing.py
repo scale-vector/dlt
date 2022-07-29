@@ -16,13 +16,13 @@ COLUMN_HINTS: Set[THintType] = set(["partition", "cluster", "primary_key", "fore
 WRITE_DISPOSITIONS: Set[TWriteDisposition] = set(get_args(TWriteDisposition))
 
 
-class TColumnBase(TypedDict, total=True):
+class TColumnSchemaBase(TypedDict, total=True):
     name: Optional[str]
     data_type: TDataType
     nullable: bool
 
 
-class TColumn(TColumnBase, total=False):
+class TColumnSchema(TColumnSchemaBase, total=False):
     description: Optional[str]
     partition: Optional[bool]
     cluster: Optional[bool]
@@ -32,7 +32,7 @@ class TColumn(TColumnBase, total=False):
     foreign_key: Optional[bool]
 
 
-TTableColumns = Dict[str, TColumn]
+TTableSchemaColumns = Dict[str, TColumnSchema]
 TSimpleRegex = NewType("TSimpleRegex", str)
 TColumnName = NewType("TColumnName", str)
 SIMPLE_REGEX_PREFIX = "re:"
@@ -43,22 +43,22 @@ class TRowFilters(TypedDict, total=True):
     includes: Optional[List[TSimpleRegex]]
 
 
-class TTable(TypedDict, total=False):
+class TTableSchema(TypedDict, total=False):
     name: Optional[str]
     description: Optional[str]
     write_disposition: Optional[TWriteDisposition]
     table_sealed: Optional[bool]
     parent: Optional[str]
     filters: Optional[TRowFilters]
-    columns: TTableColumns
+    columns: TTableSchemaColumns
 
 
-class TPartialTable(TTable):
+class TPartialTableSchema(TTableSchema):
     pass
 
 
-TSchemaTables = Dict[str, TTable]
-TSchemaUpdate = Dict[str, List[TPartialTable]]
+TSchemaTables = Dict[str, TTableSchema]
+TSchemaUpdate = Dict[str, List[TPartialTableSchema]]
 
 
 class TJSONNormalizer(TypedDict, total=False):

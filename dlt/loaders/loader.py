@@ -1,5 +1,4 @@
-from types import ModuleType
-from typing import Any, Iterator, List, Dict, Literal, Optional, Tuple, Type
+from typing import List, Optional, Tuple, Type, Protocol
 from multiprocessing.pool import ThreadPool
 from importlib import import_module
 from prometheus_client import REGISTRY, Counter, Gauge, CollectorRegistry, Summary
@@ -9,42 +8,51 @@ from dlt.common import sleep, logger
 from dlt.common.runners import TRunArgs, TRunMetrics, initialize_runner, run_pool
 from dlt.common.logger import process_internal_exception, pretty_format_exception
 from dlt.common.exceptions import TerminalValueError
-from dlt.common.dataset_writers import TWriterType
+from dlt.common.dataset_writers import TLoaderFileFormat
 from dlt.common.schema import Schema
-from dlt.common.schema.typing import TTable
+from dlt.common.schema.typing import TTableSchema
 from dlt.common.storages import SchemaStorage
 from dlt.common.storages.loader_storage import LoaderStorage
 from dlt.common.telemetry import get_logging_extras, set_gauge_all_labels
+from dlt.common.typing import StrAny
 
-from dlt.loaders.exceptions import LoadClientTerminalException, LoadClientTransientException, LoadClientUnsupportedWriteDisposition, LoadClientUnsupportedWriter, LoadJobNotExistsException, LoadUnknownTableException
+from dlt.loaders.exceptions import LoadClientTerminalException, LoadClientTransientException, LoadClientUnsupportedWriteDisposition, LoadClientUnsupportedFileFormats, LoadJobNotExistsException, LoadUnknownTableException
 from dlt.loaders.client_base import JobClientBase, LoadJob
-from dlt.loaders.local_types import LoadJobStatus
+from dlt.loaders.typing import LoadJobStatus, TLoaderCapabilities
 from dlt.loaders.configuration import configuration, LoaderConfiguration
 
 
 CONFIG: Type[LoaderConfiguration] = None
 load_storage: LoaderStorage = None
-client_module: ModuleType = None
+load_client_cls: Type[JobClientBase] = None
 load_counter: Counter = None
 job_gauge: Gauge = None
 job_counter: Counter = None
 job_wait_summary: Summary = None
 
 
-def import_client(client_type: str) -> ModuleType:
-    return import_module(f".{client_type}.client", "dlt.loaders")
+class SupportsLoadClient(Protocol):
+    CLIENT: Type[JobClientBase]
 
 
-def make_client(schema: Schema) -> JobClientBase:
-    return client_module.make_client(schema, CONFIG)  # type: ignore
+def loader_capabilities(client_type: str) -> TLoaderCapabilities:
+    m: SupportsLoadClient = import_module(f"dlt.loaders.{client_type}.client")
+    return m.CLIENT.capabilities()
 
 
-def supported_writer() -> TWriterType:
-    return client_module.supported_writer(CONFIG)  # type: ignore
+def import_client_cls(client_type: str, initial_values: StrAny = None) -> Type[JobClientBase]:
+    m: SupportsLoadClient = import_module(f"dlt.loaders.{client_type}.client")
+    m.CLIENT.configure(initial_values)
+    return m.CLIENT
 
 
 def create_folders(is_storage_owner: bool) -> LoaderStorage:
-    load_storage = LoaderStorage(is_storage_owner, CONFIG, supported_writer())
+    load_storage = LoaderStorage(
+        is_storage_owner,
+        CONFIG,
+        load_client_cls.capabilities()["preferred_loader_file_format"],
+        load_client_cls.capabilities()["supported_loader_file_formats"]
+    )
     load_storage.initialize_storage()
     return load_storage
 
@@ -58,7 +66,7 @@ def create_gauges(registry: CollectorRegistry) -> Tuple[MetricWrapperBase, Metri
     )
 
 
-def get_load_table(schema: Schema, table_name: str, file_name: str) -> TTable:
+def get_load_table(schema: Schema, table_name: str, file_name: str) -> TTableSchema:
     try:
         table = schema.get_table(table_name)
         # add write disposition if not specified - in child tables
@@ -73,10 +81,10 @@ def spool_job(file_path: str, load_id: str, schema: Schema) -> Optional[LoadJob]
     # open new connection for each upload
     job: LoadJob = None
     try:
-        with make_client(schema) as client:
-            table_name, writer_type = load_storage.parse_load_file_name(file_path)
-            if writer_type != client.capabilities["writer_type"]:
-                raise LoadClientUnsupportedWriter(writer_type, [client.capabilities["writer_type"]], file_path)
+        with load_client_cls(schema) as client:
+            table_name, loader_file_type = load_storage.parse_load_file_name(file_path)
+            if loader_file_type not in client.capabilities()["supported_loader_file_formats"]:
+                raise LoadClientUnsupportedFileFormats(loader_file_type, client.capabilities()["supported_loader_file_formats"], file_path)
             logger.info(f"Will load file {file_path} with table name {table_name}")
             table = get_load_table(schema, table_name, file_path)
             if table["write_disposition"] not in ["append", "replace"]:
@@ -100,7 +108,7 @@ def spool_new_jobs(pool: ThreadPool, load_id: str, schema: Schema) -> Tuple[int,
     # use thread based pool as jobs processing is mostly I/O and we do not want to pickle jobs
     # TODO: combine files by providing a list of files pertaining to same table into job, so job must be
     # extended to accept a list
-    load_files = load_storage.list_new_jobs(load_id)[:CONFIG.MAX_PARALLEL_LOADS]
+    load_files = load_storage.list_new_jobs(load_id)[:CONFIG.WORKERS]
     file_count = len(load_files)
     if file_count == 0:
         logger.info(f"No new jobs found in {load_id}")
@@ -198,7 +206,7 @@ def load(pool: ThreadPool) -> TRunMetrics:
     schema = schema_storage.load_folder_schema(load_storage.get_load_path(load_id))
     logger.info(f"Loaded schema name {schema.schema_name} and version {schema.schema_version}")
     # initialize analytical storage ie. create dataset required by passed schema
-    with make_client(schema) as client:
+    with load_client_cls(schema) as client:
         logger.info(f"Client {CONFIG.CLIENT_TYPE} will start load")
         client.initialize_storage()
         schema_update = load_storage.begin_schema_update(load_id)
@@ -222,7 +230,7 @@ def load(pool: ThreadPool) -> TRunMetrics:
         )
     # if there are no existing or new jobs we archive the package
     if jobs_count == 0:
-        with make_client(schema) as client:
+        with load_client_cls(schema) as client:
             # TODO: this script should be executed as a job (and contain also code to merge/upsert data and drop temp tables)
             # TODO: post loading jobs
             remaining_jobs = client.complete_load(load_id)
@@ -243,13 +251,13 @@ def load(pool: ThreadPool) -> TRunMetrics:
     return TRunMetrics(False, False, len(load_storage.list_loads()))
 
 
-def configure(C: Type[LoaderConfiguration], collector: CollectorRegistry, is_storage_owner: bool = False) -> None:
+def configure(C: Type[LoaderConfiguration], collector: CollectorRegistry, client_initial_values: StrAny = None, is_storage_owner: bool = False) -> None:
     global CONFIG
-    global client_module, load_storage
+    global load_client_cls, load_storage
     global load_counter, job_gauge, job_counter, job_wait_summary
 
     CONFIG = C
-    client_module = import_client(C.CLIENT_TYPE)
+    load_client_cls = import_client_cls(C.CLIENT_TYPE, initial_values=client_initial_values)
     load_storage = create_folders(is_storage_owner)
     try:
         load_counter, job_gauge, job_counter, job_wait_summary = create_gauges(collector)

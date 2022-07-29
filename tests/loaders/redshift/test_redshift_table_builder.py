@@ -1,15 +1,13 @@
-import os
 import pytest
 from copy import deepcopy
 
-from dlt.common.utils import custom_environ, uniq_id
+from dlt.common.utils import uniq_id, custom_environ
 from dlt.common.schema import Schema
 from dlt.common.schema.utils import new_table
-from dlt.common.configuration import make_configuration, PostgresConfiguration
+from dlt.common.configuration import PostgresConfiguration, make_configuration
 
-from dlt.loaders.configuration import configuration
-from dlt.loaders.redshift.client import RedshiftClient
 from dlt.loaders.exceptions import LoadClientSchemaWillNotUpdate
+from dlt.loaders.redshift.client import RedshiftClient
 
 from tests.loaders.utils import TABLE_UPDATE
 
@@ -22,9 +20,8 @@ def schema() -> Schema:
 @pytest.fixture
 def client(schema: Schema) -> RedshiftClient:
     # return client without opening connection
-    CLIENT_CONFIG: PostgresConfiguration = configuration({"CLIENT_TYPE": "redshift"})
-    CLIENT_CONFIG.PG_SCHEMA_PREFIX = "TEST" + uniq_id()
-    return RedshiftClient(schema, CLIENT_CONFIG)
+    RedshiftClient.configure(initial_values={"DEFAULT_DATASET": "TEST" + uniq_id()})
+    return RedshiftClient(schema)
 
 
 def test_configuration() -> None:
@@ -56,7 +53,7 @@ def test_alter_table(client: RedshiftClient) -> None:
     client.schema.update_schema(new_table("event_test_table", columns=TABLE_UPDATE))
     # table has no columns
     sql = client._get_table_update_sql("event_test_table", {}, True)
-    canonical_name = client.sql_client.fully_qualified_table_name("event_test_table")
+    canonical_name = client.sql_client.make_qualified_table_name("event_test_table")
     assert sql.startswith("BEGIN TRANSACTION;\n")
     # must have several ALTER TABLE statements
     assert sql.count(f"ALTER TABLE {canonical_name}\nADD COLUMN") == len(TABLE_UPDATE)

@@ -10,7 +10,7 @@ from examples.sources.rasa_tracker_store import get_source
 from examples.schemas.rasa_tracker_store import discover_schema
 
 # makes all 'timestamp' fields of type timestamps and filters out response selectors
-# all the fields are inferred by the unpacker
+# all the fields are inferred by the normalizer
 schema = discover_schema()
 
 # this is also example of source pipelining: one source can be source for another one
@@ -42,8 +42,8 @@ p.create_pipeline(cred, schema=discover_schema())
 # extract data, chain all iterators from `sources`.
 # TODO: add extractor that will extract many iterators in parallel
 p.extract(chain(*sources))
-# unpack and load data
-p.unpack()
+# normalize and load data
+p.normalize()
 # uncomment to see nice final schema
 print(p.get_default_schema().as_yaml(remove_defaults=True))
 p.load()

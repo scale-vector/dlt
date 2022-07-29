@@ -6,11 +6,13 @@ from typing import Any
 from dlt import __version__ as auto_version
 from dlt.common import logger, sleep
 from dlt.common.typing import StrStr
-from dlt.common.configuration import BasicConfiguration
+from dlt.common.configuration import RunConfiguration
+
+from tests.utils import preserve_environ
 
 
-class PureBasicConfiguration(BasicConfiguration):
-    NAME: str = "logger"
+class PureBasicConfiguration(RunConfiguration):
+    PIPELINE_NAME: str = "logger"
 
 
 class PureBasicConfigurationProc(PureBasicConfiguration):
@@ -23,14 +25,6 @@ class JsonLoggerConfiguration(PureBasicConfigurationProc):
 
 class SentryLoggerConfiguration(JsonLoggerConfiguration):
     SENTRY_DSN: str = "http://user:pass@localhost/818782"
-
-
-@pytest.fixture(scope="module", autouse=True)
-def preserve_environ() -> None:
-    saved_environ = environ.copy()
-    yield
-    environ.clear()
-    environ.update(saved_environ)
 
 
 @pytest.fixture(scope="function")

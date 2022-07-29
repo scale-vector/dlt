@@ -9,4 +9,4 @@ def load_json_case(name: str) -> Mapping:
 
 
 def json_case_path(name: str) -> str:
-    return f"./tests/unpacker/cases/{name}.json"
+    return f"./tests/normalize/cases/{name}.json"

@@ -8,12 +8,11 @@ on:
   workflow_dispatch:
 
 env:
-  NAME: workflow
   PROJECT_ID: chat-analytics-rasa-ci
   BQ_CRED_CLIENT_EMAIL: chat-analytics-loader@chat-analytics-rasa-ci.iam.gserviceaccount.com
   BQ_CRED_PRIVATE_KEY: ${{ secrets.BQ_CRED_PRIVATE_KEY }}
   BQ_CRED_TOKEN_URI: https://oauth2.googleapis.com/token
-  DATASET: workflowtest
+  DEFAULT_DATASET: workflowtest
 
 jobs:
 

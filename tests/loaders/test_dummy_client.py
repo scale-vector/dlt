@@ -27,7 +27,7 @@ from tests.utils import TEST_STORAGE, clean_storage, init_logger
 
 @pytest.fixture(autouse=True)
 def storage() -> FileStorage:
-    clean_storage(init_unpacker=True, init_loader=True)
+    clean_storage(init_normalize=True, init_loader=True)
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -42,7 +42,7 @@ def test_gen_configuration() -> None:
     # for production config
     with patch.dict(environ, {"IS_DEVELOPMENT_CONFIG": "False"}):
         # mock missing config values
-        setup_loader({"LOADING_VOLUME_PATH": LoaderConfiguration.LOADING_VOLUME_PATH})
+        setup_loader(initial_values={"LOADING_VOLUME_PATH": LoaderConfiguration.LOADING_VOLUME_PATH})
         assert ProductionLoaderConfiguration in loader.CONFIG.mro()
         assert LoaderConfiguration in loader.CONFIG.mro()
 
@@ -93,7 +93,7 @@ def test_unsupported_write_disposition() -> None:
 
 def test_spool_job_failed() -> None:
     # this config fails job on start
-    setup_loader({"FAIL_PROB" : 1.0})
+    setup_loader(initial_client_values={"FAIL_PROB" : 1.0})
     load_id, schema = prepare_load_package(
         ["event_user.839c6e6b514e427687586ccc65bf133f.jsonl",
         "event_loop_interrupted.839c6e6b514e427687586ccc65bf133f.jsonl"]
@@ -118,7 +118,7 @@ def test_spool_job_failed() -> None:
 
 def test_spool_job_retry_new() -> None:
     # this config retries job on start (transient fail)
-    setup_loader({"RETRY_PROB" : 1.0})
+    setup_loader(initial_client_values={"RETRY_PROB" : 1.0})
     load_id, schema = prepare_load_package(
         ["event_user.839c6e6b514e427687586ccc65bf133f.jsonl",
         "event_loop_interrupted.839c6e6b514e427687586ccc65bf133f.jsonl"]
@@ -178,7 +178,7 @@ def test_try_retrieve_job() -> None:
         loader.load_storage.start_job(load_id, JobClientBase.get_file_name_from_file_path(f))
     # dummy client may retrieve jobs that it created itself, jobs in started folder are unknown
     # and returned as terminal
-    with loader.make_client(schema) as c:
+    with loader.load_client_cls(schema) as c:
         job_count, jobs = loader.retrieve_jobs(c, load_id)
         assert job_count == 2
         for j in jobs:
@@ -191,7 +191,7 @@ def test_try_retrieve_job() -> None:
     jobs_count, jobs = loader.spool_new_jobs(ThreadPool(), load_id, schema)
     assert jobs_count == 2
     # now jobs are known
-    with loader.make_client(schema) as c:
+    with loader.load_client_cls(schema) as c:
         job_count, jobs = loader.retrieve_jobs(c, load_id)
         assert job_count == 2
         for j in jobs:
@@ -199,20 +199,20 @@ def test_try_retrieve_job() -> None:
 
 
 def test_completed_loop() -> None:
-    setup_loader({"COMPLETED_PROB": 1.0})
+    setup_loader(initial_client_values={"COMPLETED_PROB": 1.0})
     assert_complete_job(loader.load_storage.storage)
 
 
 def test_failed_loop() -> None:
     # ask to delete completed
     loader.CONFIG.DELETE_COMPLETED_JOBS = True
-    setup_loader({"FAIL_PROB": 1.0})
+    setup_loader(initial_client_values={"FAIL_PROB": 1.0})
     # actually not deleted because one of the jobs failed
     assert_complete_job(loader.load_storage.storage, should_delete_completed=False)
 
 
 def test_completed_loop_with_delete_completed() -> None:
-    setup_loader({"COMPLETED_PROB": 1.0})
+    setup_loader(initial_client_values={"COMPLETED_PROB": 1.0})
     loader.CONFIG.DELETE_COMPLETED_JOBS = True
     loader.load_storage = loader.create_folders(is_storage_owner=False)
     assert_complete_job(loader.load_storage.storage, should_delete_completed=True)
@@ -220,7 +220,7 @@ def test_completed_loop_with_delete_completed() -> None:
 
 def test_retry_on_new_loop() -> None:
     # test job that retries sitting in new jobs
-    setup_loader({"RETRY_PROB" : 1.0})
+    setup_loader(initial_client_values={"RETRY_PROB" : 1.0})
     load_id, schema = prepare_load_package(
         ["event_user.839c6e6b514e427687586ccc65bf133f.jsonl",
         "event_loop_interrupted.839c6e6b514e427687586ccc65bf133f.jsonl"]
@@ -236,7 +236,7 @@ def test_retry_on_new_loop() -> None:
     files = loader.load_storage.list_new_jobs(load_id)
     assert len(files) == 2
     # jobs will be completed
-    setup_loader({"COMPLETED_PROB" : 1.0})
+    setup_loader(initial_client_values={"COMPLETED_PROB" : 1.0})
     loader.load(ThreadPool())
     files = loader.load_storage.list_new_jobs(load_id)
     assert len(files) == 0
@@ -308,14 +308,19 @@ def prepare_load_package(cases: Sequence[str]) -> Tuple[str, Schema]:
     return load_id, schema
 
 
-def setup_loader(initial_values: StrAny = None) -> None:
+def setup_loader(initial_values: StrAny = None, initial_client_values: StrAny = None) -> None:
     default_values = {
-        "CLIENT_TYPE": "dummy",
-        "WRITER_TYPE": "jsonl"
+        "CLIENT_TYPE": "dummy"
+    }
+    default_client_values = {
+        "LOADER_FILE_FORMAT": "jsonl"
     }
     if initial_values:
         default_values.update(initial_values)
+    if initial_client_values:
+        default_client_values.update(initial_client_values)
     # setup loader
-    loader.configure(configuration(initial_values=default_values), CollectorRegistry(auto_describe=True))
+    loader.configure(configuration(initial_values=default_values), CollectorRegistry(auto_describe=True), client_initial_values=default_client_values)
+
     # reset jobs for a test
     client.JOBS = {}

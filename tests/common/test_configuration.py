@@ -4,11 +4,12 @@ from typing import Any, Dict, List, NewType, Optional, Tuple
 import pytest
 
 from dlt.common.configuration import (
-    BasicConfiguration, ConfigEntryMissingException, ConfigFileNotFoundException,
+    RunConfiguration, ConfigEntryMissingException, ConfigFileNotFoundException,
     ConfigEnvValueCannotBeCoercedException, utils)
 from dlt.common.configuration.utils import (_coerce_single_value, IS_DEVELOPMENT_CONFIG_KEY,
                                                            _get_config_attrs_with_hints, TSecretValue,
-                                                           is_direct_descendant, config_as_dict, make_configuration)
+                                                           is_direct_descendant, make_configuration)
+from tests.utils import preserve_environ
 
 # used to test version
 __version__ = "1.0.5"
@@ -63,28 +64,28 @@ COERCED_EXCEPTIONS = {
 }
 
 
-class SimpleConfiguration(BasicConfiguration):
-    NAME: str = "Some Name"
+class SimpleConfiguration(RunConfiguration):
+    PIPELINE_NAME: str = "Some Name"
 
 
-class WrongConfiguration(BasicConfiguration):
-    NAME: str = "Some Name"
+class WrongConfiguration(RunConfiguration):
+    PIPELINE_NAME: str = "Some Name"
     NoneConfigVar = None
     LOG_COLOR: bool = True
 
 
-class SecretConfiguration(BasicConfiguration):
-    NAME: str = "secret"
+class SecretConfiguration(RunConfiguration):
+    PIPELINE_NAME: str = "secret"
     SECRET_VALUE: TSecretValue = None
 
 
-class SecretKubeConfiguration(BasicConfiguration):
-    NAME: str = "secret kube"
+class SecretKubeConfiguration(RunConfiguration):
+    PIPELINE_NAME: str = "secret kube"
     SECRET_KUBE: TSecretValue = None
 
 
-class TestCoercionConfiguration(BasicConfiguration):
-    NAME: str = "Some Name"
+class TestCoercionConfiguration(RunConfiguration):
+    PIPELINE_NAME: str = "Some Name"
     STR_VAL: str = None
     INT_VAL: int = None
     BOOL_VAL: bool = None
@@ -100,14 +101,14 @@ class TestCoercionConfiguration(BasicConfiguration):
 
 
 class VeryWrongConfiguration(WrongConfiguration):
-    NAME: str = "Some Name"
+    PIPELINE_NAME: str = "Some Name"
     STR_VAL: str = ""
     INT_VAL: int = None
     LOG_COLOR: str = "1"  # type: ignore
 
 
-class ConfigurationWithOptionalTypes(BasicConfiguration):
-    NAME: str = "Some Name"
+class ConfigurationWithOptionalTypes(RunConfiguration):
+    PIPELINE_NAME: str = "Some Name"
 
     STR_VAL: Optional[str] = None
     INT_VAL: Optional[int] = None
@@ -118,25 +119,17 @@ class ProdConfigurationWithOptionalTypes(ConfigurationWithOptionalTypes):
     PROD_VAL: str = "prod"
 
 
-class MockProdConfiguration(BasicConfiguration):
-    NAME: str = "comp"
+class MockProdConfiguration(RunConfiguration):
+    PIPELINE_NAME: str = "comp"
 
 
-class MockProdConfigurationVar(BasicConfiguration):
-    NAME: str = "comp"
+class MockProdConfigurationVar(RunConfiguration):
+    PIPELINE_NAME: str = "comp"
 
 
 LongInteger = NewType("LongInteger", int)
 FirstOrderStr = NewType("FirstOrderStr", str)
 SecondOrderStr = NewType("SecondOrderStr", FirstOrderStr)
-
-
-@pytest.fixture(scope="module", autouse=True)
-def preserve_environ() -> None:
-    saved_environ = environ.copy()
-    yield
-    environ.clear()
-    environ.update(saved_environ)
 
 
 @pytest.fixture(scope="function")
@@ -145,9 +138,9 @@ def environment() -> Any:
     return environ
 
 
-def test_basic_configuration_gen_name(environment: Any) -> None:
-    C = make_configuration(BasicConfiguration, BasicConfiguration)
-    assert C.NAME.startswith("dlt_")
+def test_run_configuration_gen_name(environment: Any) -> None:
+    C = make_configuration(RunConfiguration, RunConfiguration)
+    assert C.PIPELINE_NAME.startswith("dlt_")
 
 
 def test_configuration_to_dict(environment: Any) -> None:
@@ -156,18 +149,18 @@ def test_configuration_to_dict(environment: Any) -> None:
         'IS_DEVELOPMENT_CONFIG': True,
         'LOG_FORMAT': '{asctime}|[{levelname:<21}]|{process}|{name}|{filename}|{funcName}:{lineno}|{message}',
         'LOG_LEVEL': 'DEBUG',
-        'NAME': 'secret',
+        'PIPELINE_NAME': 'secret',
         'PROMETHEUS_PORT': None,
         'REQUEST_TIMEOUT': (15, 300),
         'SECRET_VALUE': None,
         'SENTRY_DSN': None
     }
-    assert config_as_dict(SecretConfiguration) == {k.lower():v for k,v in expected_dict.items()}
-    assert config_as_dict(SecretConfiguration, lowercase=False) == expected_dict
+    assert SecretConfiguration.as_dict() == {k.lower():v for k,v in expected_dict.items()}
+    assert SecretConfiguration.as_dict(lowercase=False) == expected_dict
 
     environment["SECRET_VALUE"] = "secret"
     C = make_configuration(SecretConfiguration, SecretConfiguration)
-    d = config_as_dict(C, lowercase=False)
+    d = C.as_dict(lowercase=False)
     expected_dict["_VERSION"] = d["_VERSION"]
     expected_dict["SECRET_VALUE"] = "secret"
     assert d == expected_dict
@@ -214,7 +207,7 @@ def test_conf(environment: Any) -> None:
     utils._is_config_bounded(SimpleConfiguration, keys)
 
     # value will be coerced to bool
-    assert BasicConfiguration.IS_DEVELOPMENT_CONFIG is True
+    assert RunConfiguration.IS_DEVELOPMENT_CONFIG is True
 
 
 def test_find_all_keys() -> None:
@@ -299,15 +292,15 @@ def test_auto_derivation(environment: Any) -> None:
 
 def test_initial_values(environment: Any) -> None:
     # initial values will be overridden from env
-    environment["NAME"] = "env name"
+    environment["PIPELINE_NAME"] = "env name"
     environment["CREATED_VAL"] = "12837"
     # set initial values and allow partial config
     C = make_configuration(TestCoercionConfiguration, TestCoercionConfiguration,
-        {"NAME": "initial name", "NONE_VAL": type(environment), "CREATED_VAL": 878232, "BYTES_VAL": b"str"},
+        {"PIPELINE_NAME": "initial name", "NONE_VAL": type(environment), "CREATED_VAL": 878232, "BYTES_VAL": b"str"},
         accept_partial=True
     )
     # from env
-    assert C.NAME == "env name"
+    assert C.PIPELINE_NAME == "env name"
     # from initial
     assert C.BYTES_VAL == b"str"
     assert C.NONE_VAL == type(environment)
@@ -424,10 +417,10 @@ def test_configuration_files(environment: Any) -> None:
     environment["CONFIG_FILES_STORAGE_PATH"] = "./tests/common/cases/schemas/ev1/%s"
     C = utils.make_configuration(MockProdConfigurationVar, MockProdConfigurationVar)
     assert C.CONFIG_FILES_STORAGE_PATH == environment["CONFIG_FILES_STORAGE_PATH"]
-    assert utils.has_configuration_file("hasn't", C) is False
-    assert utils.has_configuration_file("event_schema.json", C) is True
-    assert utils.get_configuration_file_path("event_schema.json", C) == "./tests/common/cases/schemas/ev1/event_schema.json"
-    with utils.open_configuration_file("event_schema.json", "r", C) as f:
+    assert C.has_configuration_file("hasn't") is False
+    assert C.has_configuration_file("event_schema.json") is True
+    assert C.get_configuration_file_path("event_schema.json") == "./tests/common/cases/schemas/ev1/event_schema.json"
+    with C.open_configuration_file("event_schema.json", "r") as f:
         f.read()
     with pytest.raises(ConfigFileNotFoundException):
-        utils.open_configuration_file("hasn't", "r", C)
+        C.open_configuration_file("hasn't", "r")

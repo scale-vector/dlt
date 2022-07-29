@@ -52,14 +52,14 @@ if __name__ == '__main__':
     # pass mapping iterator over messages and extract
     pipeline.extract(map(processor, messages), table_name="messages")
 
-    # from now on each pipeline does more or less the same thing: unpack and load data
+    # from now on each pipeline does more or less the same thing: normalize and load data
 
     # now create loading packages and infer the schema
-    pipeline.unpack()
+    pipeline.normalize()
 
     # show loads, each load contains a copy of the schema that corresponds to the data inside
     # and a set of directories for job states (new -> in progress -> failed|completed)
-    new_loads = pipeline.list_unpacked_loads()
+    new_loads = pipeline.list_normalized_loads()
 
     # get inferred schema
     # schema = pipeline.get_current_schema()
@@ -69,7 +69,7 @@ if __name__ == '__main__':
     pipeline.load()
 
     # should be empty
-    new_loads = pipeline.list_unpacked_loads()
+    new_loads = pipeline.list_normalized_loads()
     print(new_loads)
 
     # now enumerate all complete loads if we have any failed packages

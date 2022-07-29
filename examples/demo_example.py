@@ -98,7 +98,7 @@ if __name__ == "__main__":
     pipeline.extract(iter(data), table_name=parent_table)
 
     # now create loading packages and infer the schema
-    pipeline.unpack()
+    pipeline.normalize()
 
     schema = pipeline.get_default_schema()
     schema_yaml = schema.as_yaml()
@@ -109,14 +109,14 @@ if __name__ == "__main__":
 
     # show loads, each load contains a copy of the schema that corresponds to the data inside
     # and a set of directories for job states (new -> in progress -> failed|completed)
-    new_loads = pipeline.list_unpacked_loads()
+    new_loads = pipeline.list_normalized_loads()
     print(new_loads)
 
     # load packages
     pipeline.load()
 
     # should be empty
-    new_loads = pipeline.list_unpacked_loads()
+    new_loads = pipeline.list_normalized_loads()
     print(new_loads)
 
     # now enumerate all complete loads if we have any failed packages

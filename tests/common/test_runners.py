@@ -10,7 +10,7 @@ from dlt.common import signals
 from tests.utils import init_logger
 
 class ModPoolRunnerConfiguration(PoolRunnerConfiguration):
-    NAME: str = "testrunners"
+    PIPELINE_NAME: str = "testrunners"
     POOL_TYPE = "none"
     RUN_SLEEP: float = 0.1
     RUN_SLEEP_IDLE: float = 0.1

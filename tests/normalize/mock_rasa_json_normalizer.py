@@ -1,11 +1,11 @@
-from dlt.common.normalizers.json import TUnpackedRowIterator
+from dlt.common.normalizers.json import TNormalizedRowIterator
 from dlt.common.schema import Schema
-from dlt.common.normalizers.json.relational import normalize as relational_normalize, extend_schema
+from dlt.common.normalizers.json.relational import normalize_data_item as relational_normalize, extend_schema
 from dlt.common.sources import with_table_name
-from dlt.common.typing import TEvent
+from dlt.common.typing import TDataItem
 
 
-def normalize(schema: Schema, source_event: TEvent, load_id: str) -> TUnpackedRowIterator:
+def normalize_data_item(schema: Schema, source_event: TDataItem, load_id: str) -> TNormalizedRowIterator:
     if schema.schema_name == "event":
         # this emulates rasa parser on standard parser
         event = {"sender_id": source_event["sender_id"], "timestamp": source_event["timestamp"]}

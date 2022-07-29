@@ -49,31 +49,34 @@ def get_source_from_stream(singer_messages: Iterator[SingerMessage], state: Dict
 
 
 def get_source(venv: Venv, tap_name: str, config_file: FilePathOrDict, catalog_file: FilePathOrDict, state: DictStrAny = None) -> Iterator[DictStrAny]:
+
+    def as_config_file(config: FilePathOrDict) -> StrOrBytesPath:
+        if type(config) is dict:
+            fd, tmp_name = tempfile.mkstemp(dir=venv.context.env_dir)
+            with os.fdopen(fd, "w") as f:
+                json.dump(config, f)
+            return cast(str, tmp_name)
+        else:
+            return config  # type: ignore
+
     # write config dictionary to temp file in virtual environment if passed as dict
-    config_file_path: StrOrBytesPath = None
-    if type(config_file) is dict:
-        fd, tmp_name = tempfile.mkstemp(dir=venv.context.env_dir)
-        with os.fdopen(fd, "w") as f:
-            json.dump(config_file, f)
-            config_file_path = tmp_name
-    else:
-        config_file_path = config_file  # type: ignore
+    config_file_path = as_config_file(config_file)
 
     # process catalog like config
-    catalog_file_path: StrOrBytesPath = None
-    if type(catalog_file) is dict:
-        fd, tmp_name = tempfile.mkstemp(dir=venv.context.env_dir)
-        with os.fdopen(fd, "w") as f:
-            json.dump(catalog_file, f)
-            catalog_file_path = tmp_name
+    catalog_file_path = as_config_file(catalog_file)
+
+    # possibly pass state
+    if state and state.get("singer"):
+        state_params = ("--state", as_config_file(state["singer"]))
     else:
-        catalog_file_path = catalog_file  # type: ignore
+        state_params = ()  # type: ignore
 
     pipe_iterator = get_singer_pipe(venv,
                                     tap_name,
                                     "--config",
                                     os.path.abspath(config_file_path),
                                     "--catalog",
-                                    os.path.abspath(catalog_file_path)
+                                    os.path.abspath(catalog_file_path),
+                                    *state_params
                                     )
     yield from get_source_from_stream(pipe_iterator, state)  # type: ignore

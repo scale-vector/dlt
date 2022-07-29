@@ -9,7 +9,7 @@ from dlt.common.schema.schema import Schema
 from dlt.common.utils import uniq_id
 
 from dlt.loaders.exceptions import LoadClientTerminalInnerException
-from dlt.loaders.loader import import_client
+from dlt.loaders.loader import import_client_cls
 from dlt.loaders.redshift.client import RedshiftClient
 
 from tests.utils import TEST_STORAGE, delete_storage
@@ -33,21 +33,22 @@ def client() -> Iterator[RedshiftClient]:
 
 def test_empty_schema_name_init_storage(client: RedshiftClient) -> None:
     e_client: RedshiftClient = None
-    with import_client("redshift").make_client(Schema(""), client.C) as e_client:
+    # will reuse same configuration
+    with import_client_cls("redshift", initial_values={"DEFAULT_DATASET": client.CONFIG.DEFAULT_DATASET})(Schema("")) as e_client:
         e_client.initialize_storage()
         try:
             # schema was created with the name of just schema prefix
-            assert e_client.sql_client.has_schema(client.C.PG_SCHEMA_PREFIX)
+            assert e_client.sql_client.default_dataset_name == client.CONFIG.DEFAULT_DATASET
             # update schema
             e_client.update_storage_schema()
             assert e_client._get_schema_version_from_storage() == 1
         finally:
-            e_client.sql_client.drop_schema()
+            e_client.sql_client.drop_dataset()
 
 
 def test_recover_tx_rollback(client: RedshiftClient) -> None:
     client.update_storage_schema()
-    version_table = client.sql_client.fully_qualified_table_name("_dlt_version")
+    version_table = client.sql_client.make_qualified_table_name("_dlt_version")
     # simple syntax error
     sql = f"SELEXT * FROM {version_table}"
     with pytest.raises(psycopg2.errors.SyntaxError):
@@ -73,7 +74,7 @@ def test_recover_tx_rollback(client: RedshiftClient) -> None:
 
 def test_simple_load(client: RedshiftClient, file_storage: FileStorage) -> None:
     user_table_name = prepare_event_user_table(client)
-    canonical_name = client.sql_client.fully_qualified_table_name(user_table_name)
+    canonical_name = client.sql_client.make_qualified_table_name(user_table_name)
     # create insert
     insert_sql = "INSERT INTO {}(_dlt_id, _dlt_root_id, sender_id, timestamp) VALUES\n"
     insert_values = f"('{uniq_id()}', '{uniq_id()}', '90238094809sajlkjxoiewjhduuiuehd', '{str(pendulum.now())}')"

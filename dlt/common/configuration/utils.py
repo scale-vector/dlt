@@ -1,14 +1,14 @@
 import sys
 import semver
 from os import environ
-from os.path import isdir, isfile
-from typing import Any, Dict, List, Mapping, Optional, Type, TypeVar, IO, cast
+from os.path import isdir
+from typing import Any, Dict, List, Mapping, Optional, Type, TypeVar, cast
 
 from dlt.common.typing import StrAny, TSecretValue, is_optional_type, is_literal_type
-from dlt.common.configuration import BasicConfiguration
+from dlt.common.configuration import BaseConfiguration
 from dlt.common.configuration.exceptions import (ConfigEntryMissingException,
-                                                 ConfigEnvValueCannotBeCoercedException, ConfigFileNotFoundException)
-from dlt.common.utils import encoding_for_mode, uniq_id
+                                                 ConfigEnvValueCannotBeCoercedException)
+from dlt.common.utils import uniq_id
 
 SIMPLE_TYPES: List[Any] = [int, bool, list, dict, tuple, bytes, set, float]
 # those types and Optionals of those types should not be passed to eval function
@@ -19,8 +19,8 @@ IS_DEVELOPMENT_CONFIG_KEY: str = "IS_DEVELOPMENT_CONFIG"
 CHECK_INTEGRITY_F: str = "check_integrity"
 SECRET_STORAGE_PATH: str = "/run/secrets/%s"
 
-TConfiguration = TypeVar("TConfiguration", bound=Type[BasicConfiguration])
-TProductionConfiguration = TypeVar("TProductionConfiguration", bound=Type[BasicConfiguration])
+TConfiguration = TypeVar("TConfiguration", bound=Type[BaseConfiguration])
+TProductionConfiguration = TypeVar("TProductionConfiguration", bound=Type[BaseConfiguration])
 
 
 def make_configuration(config: TConfiguration,
@@ -38,12 +38,7 @@ def make_configuration(config: TConfiguration,
                                           type(final_config.__name__ + "_" + uniq_id(), (final_config, ), {})
                                     )
     # apply initial values while preserving hints
-    if initial_values:
-        for k, v in initial_values.items():
-            k = k.upper()
-            # overwrite only declared values
-            if hasattr(derived_config, k):
-                setattr(derived_config, k.upper(), v)
+    derived_config.apply_dict(initial_values)
 
     _apply_environ_to_config(derived_config, possible_keys_in_config)
     try:
@@ -55,21 +50,6 @@ def make_configuration(config: TConfiguration,
     _add_module_version(derived_config)
 
     return derived_config
-
-
-def has_configuration_file(name: str, config: TConfiguration) -> bool:
-    return isfile(get_configuration_file_path(name, config))
-
-
-def open_configuration_file(name: str, mode: str, config: TConfiguration) -> IO[Any]:
-    path = get_configuration_file_path(name, config)
-    if not has_configuration_file(name, config):
-        raise ConfigFileNotFoundException(path)
-    return open(path, mode, encoding=encoding_for_mode(mode))
-
-
-def get_configuration_file_path(name: str, config: TConfiguration) -> str:
-    return config.CONFIG_FILES_STORAGE_PATH % name
 
 
 def is_direct_descendant(child: Type[Any], base: Type[Any]) -> bool:
@@ -202,8 +182,3 @@ def _extract_simple_type(hint: Type[Any]) -> Type[Any]:
         return hint
     # descend into supertypes of NewType
     return _extract_simple_type(hint.__supertype__)
-
-
-def config_as_dict(config: TConfiguration, lowercase: bool = True) -> StrAny:
-    may_lower = lambda k: k.lower() if lowercase else k
-    return {may_lower(k):getattr(config, k) for k in dir(config) if not callable(getattr(config, k)) and not k.startswith("__")}

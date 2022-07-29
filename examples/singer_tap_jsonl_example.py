@@ -13,6 +13,6 @@ p.create_pipeline(GCPPipelineCredentials.from_services_file("_secrets/project123
 # p.extract(get_source(read_jsonl("examples/data/singer_taps/tap_google_sheet.jsonl")))
 raw_messages: Iterator[SingerMessage] = read_jsonl("examples/data/singer_taps/tap_hubspot.jsonl")  # type: ignore
 p.extract(get_source_from_stream(raw_messages, p.state))
-p.unpack()
+p.normalize()
 # print(p.get_default_schema().as_yaml(remove_defaults=True))
 p.load()

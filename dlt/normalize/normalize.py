@@ -7,10 +7,10 @@ from prometheus_client.metrics import MetricWrapperBase
 from dlt.common import pendulum, signals, json, logger
 from dlt.common.json import custom_pua_decode
 from dlt.common.runners import TRunArgs, TRunMetrics, run_pool, initialize_runner
-from dlt.common.storages.unpacker_storage import UnpackerStorage
+from dlt.common.storages.normalize_storage import NormalizeStorage
 from dlt.common.telemetry import get_logging_extras
 from dlt.common.utils import uniq_id
-from dlt.common.typing import TEvent
+from dlt.common.typing import TDataItem
 from dlt.common.logger import process_internal_exception
 from dlt.common.exceptions import PoolException
 from dlt.common.storages import SchemaStorage
@@ -18,10 +18,10 @@ from dlt.common.schema import TSchemaUpdate, Schema
 from dlt.common.schema.exceptions import CannotCoerceColumnException
 from dlt.common.storages.loader_storage import LoaderStorage
 
-from dlt.unpacker.configuration import configuration, UnpackerConfiguration
+from dlt.normalize.configuration import configuration, NormalizeConfiguration
 
-CONFIG: Type[UnpackerConfiguration] = None
-unpack_storage: UnpackerStorage = None
+CONFIG: Type[NormalizeConfiguration] = None
+normalize_storage: NormalizeStorage = None
 load_storage: LoaderStorage = None
 schema_storage: SchemaStorage = None
 load_schema_storage: SchemaStorage = None
@@ -33,23 +33,24 @@ load_package_counter: Counter = None
 
 def create_gauges(registry: CollectorRegistry) -> Tuple[MetricWrapperBase, MetricWrapperBase, MetricWrapperBase, MetricWrapperBase]:
     return (
-        Counter("unpacker_event_count", "Events processed in unpacker", ["schema"], registry=registry),
-        Gauge("unpacker_last_events", "Number of events processed in last run", ["schema"], registry=registry),
-        Gauge("unpacker_schema_version", "Current schema version", ["schema"], registry=registry),
-        Gauge("unpacker_load_packages_created_count", "Count of load package created", ["schema"], registry=registry)
+        Counter("normalize_event_count", "Events processed in normalize", ["schema"], registry=registry),
+        Gauge("normalize_last_events", "Number of events processed in last run", ["schema"], registry=registry),
+        Gauge("normalize_schema_version", "Current schema version", ["schema"], registry=registry),
+        Gauge("normalize_load_packages_created_count", "Count of load package created", ["schema"], registry=registry)
     )
 
 
-def create_folders() -> Tuple[UnpackerStorage, LoaderStorage, SchemaStorage, SchemaStorage]:
-    unpack_storage = UnpackerStorage(True, CONFIG)
+def create_folders() -> Tuple[NormalizeStorage, LoaderStorage, SchemaStorage, SchemaStorage]:
+    normalize_storage = NormalizeStorage(True, CONFIG)
     schema_storage = SchemaStorage(CONFIG.SCHEMA_VOLUME_PATH, makedirs=True)
     load_schema_storage = SchemaStorage(CONFIG.LOADING_VOLUME_PATH, makedirs=False)
-    load_storage = LoaderStorage(True, CONFIG, CONFIG.WRITER_TYPE)
+    # normalize saves in preferred format but can read all supported formats
+    load_storage = LoaderStorage(True, CONFIG, CONFIG.LOADER_FILE_FORMAT, LoaderStorage.ALL_SUPPORTED_FILE_FORMATS)
 
-    unpack_storage.initialize_storage()
+    normalize_storage.initialize_storage()
     load_storage.initialize_storage()
 
-    return unpack_storage, load_storage, schema_storage, load_schema_storage
+    return normalize_storage, load_storage, schema_storage, load_schema_storage
 
 
 def install_schemas(default_schemas_path: str, schema_names: List[str]) -> None:
@@ -74,8 +75,8 @@ def load_or_create_schema(schema_name: str) -> Schema:
 
 
 # this is a worker process
-def w_unpack_files(schema_name: str, load_id: str, events_files: Sequence[str]) -> TSchemaUpdate:
-    unpacked_data: Dict[str, List[Any]] = {}
+def w_normalize_files(schema_name: str, load_id: str, events_files: Sequence[str]) -> TSchemaUpdate:
+    normalized_data: Dict[str, List[Any]] = {}
 
     schema_update: TSchemaUpdate = {}
     schema = load_or_create_schema(schema_name)
@@ -85,10 +86,10 @@ def w_unpack_files(schema_name: str, load_id: str, events_files: Sequence[str]) 
     for events_file in events_files:
         try:
             logger.debug(f"Processing events file {events_file} in load_id {load_id} with file_id {file_id}")
-            with unpack_storage.storage.open_file(events_file) as f:
-                events: Sequence[TEvent] = json.load(f)
+            with normalize_storage.storage.open_file(events_file) as f:
+                events: Sequence[TDataItem] = json.load(f)
             for event in events:
-                for (table_name, parent_table), row in schema.normalize_json(schema, event, load_id):
+                for (table_name, parent_table), row in schema.normalize_data_item(schema, event, load_id):
                     # filter row, may eliminate some or all fields
                     row = schema.filter_row(table_name, row)
                     # do not process empty rows
@@ -104,14 +105,14 @@ def w_unpack_files(schema_name: str, load_id: str, events_files: Sequence[str]) 
                             table_updates = schema_update.setdefault(table_name, [])
                             table_updates.append(partial_table)
                         # store row
-                        rows = unpacked_data.setdefault(table_name, [])
+                        rows = normalized_data.setdefault(table_name, [])
                         rows.append(row)
         except Exception:
             process_internal_exception(f"Exception when processing file {events_file}")
-            raise PoolException("unpack_files", events_file)
+            raise PoolException("normalize_files", events_file)
 
     # save rows and return schema changes to be gathered in parent process
-    for table_name, rows in unpacked_data.items():
+    for table_name, rows in normalized_data.items():
         # save into new jobs to processed as load
         table = schema.get_table_columns(table_name)
         load_storage.write_temp_loading_file(load_id, table_name, table, file_id, rows)
@@ -126,18 +127,18 @@ def map_parallel(pool: ProcessPool, schema_name: str, load_id: str, files: Seque
     # we chunk files in a way to not exceed MAX_EVENTS_IN_CHUNK and split them equally
     # between processors
     configured_processes = pool._processes  # type: ignore
-    chunk_files = UnpackerStorage.chunk_by_events(files, CONFIG.MAX_EVENTS_IN_CHUNK, configured_processes)
+    chunk_files = NormalizeStorage.chunk_by_events(files, CONFIG.MAX_EVENTS_IN_CHUNK, configured_processes)
     logger.info(f"Obtained {len(chunk_files)} processing chunks")
     param_chunk = [(schema_name, load_id, files) for files in chunk_files]
-    return pool.starmap(w_unpack_files, param_chunk), chunk_files
+    return pool.starmap(w_normalize_files, param_chunk), chunk_files
 
 
 def map_single(_: ProcessPool, schema_name: str, load_id: str, files: Sequence[str]) -> TMapFuncRV:
-    chunk_files = UnpackerStorage.chunk_by_events(files, CONFIG.MAX_EVENTS_IN_CHUNK, 1)
+    chunk_files = NormalizeStorage.chunk_by_events(files, CONFIG.MAX_EVENTS_IN_CHUNK, 1)
     # get in one chunk
     assert len(chunk_files) == 1
     logger.info(f"Obtained {len(chunk_files)} processing chunks")
-    return [w_unpack_files(schema_name, load_id, chunk_files[0])], chunk_files
+    return [w_normalize_files(schema_name, load_id, chunk_files[0])], chunk_files
 
 
 def update_schema(schema_name: str, schema_updates: List[TSchemaUpdate]) -> Schema:
@@ -157,7 +158,7 @@ def spool_files(pool: ProcessPool, schema_name: str, load_id: str, map_f: TMapFu
 
     schema = update_schema(schema_name, schema_updates)
     schema_version_gauge.labels(schema_name).set(schema._version)
-    logger.metrics("Unpacker metrics", extra=get_logging_extras([schema_version_gauge.labels(schema_name)]))
+    logger.metrics("Normalize metrics", extra=get_logging_extras([schema_version_gauge.labels(schema_name)]))
     logger.info(f"Saving schema {schema_name} with version {schema._version}, writing manifest files")
     # schema is updated, save it to schema volume
     schema_storage.save_store_schema(schema)
@@ -172,19 +173,19 @@ def spool_files(pool: ProcessPool, schema_name: str, load_id: str, map_f: TMapFu
     # delete event files and count events to provide metrics
     total_events = 0
     for event_file in chain.from_iterable(chunk_files):  # flatten chunks
-        unpack_storage.storage.delete(event_file)
-        total_events += UnpackerStorage.get_events_count(event_file)
+        normalize_storage.storage.delete(event_file)
+        total_events += NormalizeStorage.get_events_count(event_file)
     # log and update metrics
     logger.info(f"Chunk {load_id} processed")
     load_package_counter.labels(schema_name).inc()
     event_counter.labels(schema_name).inc(total_events)
     event_gauge.labels(schema_name).set(total_events)
-    logger.metrics("Unpacker metrics", extra=get_logging_extras(
+    logger.metrics("Normalize metrics", extra=get_logging_extras(
         [load_package_counter.labels(schema_name), event_counter.labels(schema_name), event_gauge.labels(schema_name)]))
 
 
 def spool_schema_files(pool: ProcessPool, schema_name: str, files: Sequence[str]) -> str:
-    # unpacked files will go here before being atomically renamed
+    # normalized files will go here before being atomically renamed
     load_id = str(pendulum.now().timestamp())
     load_storage.create_temp_load_folder(load_id)
     logger.info(f"Created temp load folder {load_id} on loading volume")
@@ -202,29 +203,29 @@ def spool_schema_files(pool: ProcessPool, schema_name: str, files: Sequence[str]
     return load_id
 
 
-def unpack(pool: ProcessPool) -> TRunMetrics:
-    logger.info("Running file unpacking")
+def normalize(pool: ProcessPool) -> TRunMetrics:
+    logger.info("Running file normalizing")
     # list files and group by schema name, list must be sorted for group by to actually work
-    files = unpack_storage.list_files_to_unpack_sorted()
+    files = normalize_storage.list_files_to_normalize_sorted()
     logger.info(f"Found {len(files)} files, will process in chunks of {CONFIG.MAX_EVENTS_IN_CHUNK} of events")
     if len(files) == 0:
         return TRunMetrics(True, False, 0)
     # group files by schema
-    for schema_name, files_in_schema in unpack_storage.get_grouped_iterator(files):
+    for schema_name, files_in_schema in normalize_storage.get_grouped_iterator(files):
         logger.info(f"Found files in schema {schema_name}")
         spool_schema_files(pool, schema_name, list(files_in_schema))
     # return info on still pending files (if extractor saved something in the meantime)
-    return TRunMetrics(False, False, len(unpack_storage.list_files_to_unpack_sorted()))
+    return TRunMetrics(False, False, len(normalize_storage.list_files_to_normalize_sorted()))
 
 
-def configure(C: Type[UnpackerConfiguration], collector: CollectorRegistry, default_schemas_path: str = None, schema_names: List[str] = None) -> None:
+def configure(C: Type[NormalizeConfiguration], collector: CollectorRegistry, default_schemas_path: str = None, schema_names: List[str] = None) -> None:
     global CONFIG
-    global unpack_storage, load_storage, schema_storage, load_schema_storage
+    global normalize_storage, load_storage, schema_storage, load_schema_storage
     global event_counter, event_gauge, schema_version_gauge, load_package_counter
 
     CONFIG = C
     # setup singletons
-    unpack_storage, load_storage, schema_storage, load_schema_storage = create_folders()
+    normalize_storage, load_storage, schema_storage, load_schema_storage = create_folders()
     try:
         event_counter, event_gauge, schema_version_gauge, load_package_counter = create_gauges(collector)
     except ValueError as v:
@@ -245,8 +246,7 @@ def main(args: TRunArgs, default_schemas_path: str = None, schema_names: List[st
     except Exception:
         process_internal_exception("init module")
         return -1
-    # unpack
-    return run_pool(C, unpack)
+    return run_pool(C, normalize)
 
 
 def run_main(args: TRunArgs) -> None:

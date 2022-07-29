@@ -12,7 +12,7 @@ from dlt.common.normalizers.names import TNormalizeNameFunc
 from dlt.common.typing import DictStrAny, REPattern
 from dlt.common.validation import TCustomValidator, validate_dict
 from dlt.common.schema import detections
-from dlt.common.schema.typing import SIMPLE_REGEX_PREFIX, TColumnName, TNormalizersConfig, TSimpleRegex, TStoredSchema, TTable, TTableColumns, TColumnBase, TColumn, TColumnProp, TDataType, THintType, TTypeDetectionFunc, TTypeDetections, TWriteDisposition
+from dlt.common.schema.typing import SIMPLE_REGEX_PREFIX, TColumnName, TNormalizersConfig, TSimpleRegex, TStoredSchema, TTableSchema, TTableSchemaColumns, TColumnSchemaBase, TColumnSchema, TColumnProp, TDataType, THintType, TTypeDetectionFunc, TTypeDetections, TWriteDisposition
 from dlt.common.schema.exceptions import ParentTableNotFoundException, SchemaEngineNoUpgradePathException
 
 
@@ -154,7 +154,7 @@ def upgrade_engine_version(schema_dict: DictStrAny, from_engine: int, to_engine:
             "preferred_types": p_t,
         }
         # repackage tables
-        old_tables: Dict[str, TTableColumns] = schema_dict.pop("tables")
+        old_tables: Dict[str, TTableSchemaColumns] = schema_dict.pop("tables")
         current["tables"] = {}
         for name, columns in old_tables.items():
             # find last path separator
@@ -203,7 +203,7 @@ def upgrade_engine_version(schema_dict: DictStrAny, from_engine: int, to_engine:
     return cast(TStoredSchema, schema_dict)
 
 
-def add_missing_hints(column: TColumnBase) -> TColumn:
+def add_missing_hints(column: TColumnSchemaBase) -> TColumnSchema:
     return {
         **{  # type:ignore
             "partition": False,
@@ -337,7 +337,7 @@ def coerce_type(to_type: TDataType, from_type: TDataType, value: Any) -> Any:
     raise ValueError(value)
 
 
-def compare_columns(a: TColumn, b: TColumn) -> bool:
+def compare_columns(a: TColumnSchema, b: TColumnSchema) -> bool:
     return a["data_type"] == b["data_type"] and a["nullable"] == b["nullable"]
 
 
@@ -347,7 +347,7 @@ def hint_to_column_prop(h: THintType) -> TColumnProp:
     return h
 
 
-def version_table() -> TTable:
+def version_table() -> TTableSchema:
     table = new_table("_dlt_version", columns=[
             add_missing_hints({
                 "name": "version",
@@ -371,7 +371,7 @@ def version_table() -> TTable:
     return table
 
 
-def load_table() -> TTable:
+def load_table() -> TTableSchema:
     table = new_table("_dlt_loads", columns=[
             add_missing_hints({
                 "name": "load_id",
@@ -395,10 +395,10 @@ def load_table() -> TTable:
     return table
 
 
-def new_table(table_name: str, parent_name: str = None, write_disposition: TWriteDisposition = None, columns: Sequence[TColumn] = None) -> TTable:
-    table: TTable = {
+def new_table(table_name: str, parent_name: str = None, write_disposition: TWriteDisposition = None, columns: Sequence[TColumnSchema] = None) -> TTableSchema:
+    table: TTableSchema = {
         "name": table_name,
-        "columns": {} if columns is None else {c["name"]: c for c in columns}
+        "columns": {} if columns is None else {c["name"]: add_missing_hints(c) for c in columns}
     }
     if parent_name:
         table["parent"] = parent_name

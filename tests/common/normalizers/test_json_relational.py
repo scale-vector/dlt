@@ -5,7 +5,7 @@ from dlt.common.utils import digest128, uniq_id
 from dlt.common.schema import Schema
 from dlt.common.schema.utils import new_table
 
-from dlt.common.normalizers.json.relational import JSONNormalizerConfigPropagation, _flatten, _get_child_row_hash, _normalize_row, normalize
+from dlt.common.normalizers.json.relational import JSONNormalizerConfigPropagation, _flatten, _get_child_row_hash, _normalize_row, normalize_data_item
 
 from tests.utils import create_schema_with_name
 
@@ -241,7 +241,6 @@ def test_yields_parent_relation(schema: Schema) -> None:
 
     # make sure that table__e is just linking
     table__e = [r[1] for r in rows if r[0][0] == "table__e"][0]
-    print(table__e)
     assert all(f.startswith("_dlt") for f in table__e.keys()) is True
 
     # check if linking is correct when not directly derived
@@ -320,7 +319,7 @@ def test_list_of_lists(schema: Schema) -> None:
 
 def test_child_row_deterministic_hash(schema: Schema) -> None:
     row_id = uniq_id()
-    # directly set record hash so it will be adopted in unpacker as top level hash
+    # directly set record hash so it will be adopted in normalizer as top level hash
     row = {
         "_dlt_id": row_id,
         "f": [{
@@ -438,7 +437,7 @@ def test_propagates_table_context(schema: Schema) -> None:
 
 
 def test_removes_normalized_list(schema: Schema) -> None:
-    # after normalizing the list that got unpacked into child table must be deleted
+    # after normalizing the list that got normalized into child table must be deleted
     row = {"comp": [{"_timestamp": "a"}]}
     # get iterator
     normalized_rows_i = _normalize_row(schema, row, {}, "table")
@@ -463,7 +462,7 @@ def test_preserves_complex_types_list(schema: Schema) -> None:
         "value": ["from", {"complex": True}]
     }
     normalized_rows = list(_normalize_row(schema, row, {}, "event_slot"))
-    # make sure only 1 row is emitted, the list is not unpacked
+    # make sure only 1 row is emitted, the list is not normalized
     assert len(normalized_rows) == 1
     # value is kept in root row -> market as complex
     root_row = next(r for r in normalized_rows if r[0][1] is None)
@@ -474,7 +473,7 @@ def test_preserves_complex_types_list(schema: Schema) -> None:
         "value": ["from", ["complex", True]]
     }
     normalized_rows = list(_normalize_row(schema, row, {}, "event_slot"))
-    # make sure only 1 row is emitted, the list is not unpacked
+    # make sure only 1 row is emitted, the list is not normalized
     assert len(normalized_rows) == 1
     # value is kept in root row -> market as complex
     root_row = next(r for r in normalized_rows if r[0][1] is None)
@@ -492,13 +491,13 @@ def test_complex_types_for_recursion_level(schema: Schema) -> None:
             "lo": [{"e": {"v": 1}}]  # , {"e": {"v": 2}}, {"e":{"v":3 }}
         }]
     }
-    n_rows_nl = list(schema.normalize_json(schema, row, "load_id"))
+    n_rows_nl = list(schema.normalize_data_item(schema, row, "load_id"))
     # all nested elements were yielded
     assert ["default", "default__f", "default__f__l", "default__f__lo"] == [r[0][0] for r in n_rows_nl]
 
     # set max nesting to 0
     schema._normalizers_config["json"]["config"]["max_nesting"] = 0
-    n_rows = list(schema.normalize_json(schema, row, "load_id"))
+    n_rows = list(schema.normalize_data_item(schema, row, "load_id"))
     # the "f" element is left as complex type and not normalized
     assert len(n_rows) == 1
     assert n_rows[0][0][0] == "default"
@@ -507,7 +506,7 @@ def test_complex_types_for_recursion_level(schema: Schema) -> None:
 
     # max nesting 1
     schema._normalizers_config["json"]["config"]["max_nesting"] = 1
-    n_rows = list(schema.normalize_json(schema, row, "load_id"))
+    n_rows = list(schema.normalize_data_item(schema, row, "load_id"))
     assert len(n_rows) == 2
     assert ["default", "default__f"] == [r[0][0] for r in n_rows]
     # on level f, "l" and "lo" are not normalized
@@ -518,7 +517,7 @@ def test_complex_types_for_recursion_level(schema: Schema) -> None:
 
     # max nesting 2
     schema._normalizers_config["json"]["config"]["max_nesting"] = 2
-    n_rows = list(schema.normalize_json(schema, row, "load_id"))
+    n_rows = list(schema.normalize_data_item(schema, row, "load_id"))
     assert len(n_rows) == 4
     # in default__f__lo the dicts that would be flattened are complex types
     last_row = n_rows[3]
@@ -526,7 +525,7 @@ def test_complex_types_for_recursion_level(schema: Schema) -> None:
 
     # max nesting 3
     schema._normalizers_config["json"]["config"]["max_nesting"] = 3
-    n_rows = list(schema.normalize_json(schema, row, "load_id"))
+    n_rows = list(schema.normalize_data_item(schema, row, "load_id"))
     assert n_rows_nl == n_rows
 
 
@@ -543,7 +542,7 @@ def test_extract_with_table_name_meta() -> None:
     }
     # force table name
     rows = list(
-        normalize(create_schema_with_name("discord"), with_table_name(row, "channel"), "load_id")
+        normalize_data_item(create_schema_with_name("discord"), with_table_name(row, "channel"), "load_id")
     )
     # table is channel
     assert rows[0][0][0] == "channel"
@@ -561,7 +560,7 @@ def test_table_name_meta_normalized() -> None:
     }
     # force table name
     rows = list(
-        normalize(create_schema_with_name("discord"), with_table_name(row, "channelSURFING"), "load_id")
+        normalize_data_item(create_schema_with_name("discord"), with_table_name(row, "channelSURFING"), "load_id")
     )
     # table is channel
     assert rows[0][0][0] == "channel_surfing"
@@ -580,7 +579,7 @@ def test_parse_with_primary_key() -> None:
             "wo_id": [1, 2, 3]
             }]
     }
-    rows = list(normalize(schema, row, "load_id"))
+    rows = list(normalize_data_item(schema, row, "load_id"))
     # get root
     root = next(t[1] for t in rows if t[0][0] == "discord")
     assert root["_dlt_id"] == digest128("817949077341208606")
@@ -604,7 +603,7 @@ def test_parse_with_primary_key() -> None:
 
 def test_keeps_none_values() -> None:
     row = {"a": None, "timestamp": 7}
-    rows = list(normalize(create_schema_with_name("other"), row, "1762162.1212"))
+    rows = list(normalize_data_item(create_schema_with_name("other"), row, "1762162.1212"))
     table_name = rows[0][0][0]
     assert table_name == "other"
     normalized_row = rows[0][1]

@@ -1,38 +1,17 @@
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 from types import TracebackType
-from typing import Any, Generic, Iterator, List, Tuple, Optional, Sequence, Type, TypeVar, AnyStr, TypedDict
+from typing import Any, Generic, Iterator, List, Optional, Sequence, Type, AnyStr
 from pathlib import Path
 
 from dlt.common import pendulum, logger
-from dlt.common.dataset_writers import TWriterType
-from dlt.common.schema import TColumn, Schema, TTableColumns
-from dlt.common.schema.typing import TTable, TWriteDisposition
+from dlt.common.configuration import BaseConfiguration
+from dlt.common.schema import TColumnSchema, Schema, TTableSchemaColumns
+from dlt.common.schema.typing import TTableSchema
+from dlt.common.typing import StrAny
 
-from dlt.loaders.local_types import LoadJobStatus
-from dlt.loaders.exceptions import LoadClientSchemaVersionCorrupted, LoadUnknownTableException
-
-# native connection
-TNativeConn = TypeVar("TNativeConn", bound="object")
-
-# type for dbapi cursor
-class DBCursor:
-    closed: Any
-    connection: Any
-    query: Any
-    description: Tuple[Any, ...]
-
-    def execute(self, query: AnyStr, *args: Any, **kwargs: Any ) -> None:
-        ...
-    def fetchall(self) -> List[Tuple[Any, ...]]:
-        ...
-    def fetchmany(self, size: int = ...) -> List[Tuple[Any, ...]]:
-        ...
-    def fetchone(self) -> Optional[Tuple[Any, ...]]:
-        ...
-
-
-class TJobClientCapabilities(TypedDict):
-    writer_type: TWriterType
+from dlt.loaders.typing import LoadJobStatus, TNativeConn, TLoaderCapabilities, DBCursor
+from dlt.loaders.exceptions import LoadClientSchemaVersionCorrupted
 
 
 class LoadJob:
@@ -84,7 +63,7 @@ class JobClientBase(ABC):
         pass
 
     @abstractmethod
-    def start_file_load(self, table: TTable, file_path: str) -> LoadJob:
+    def start_file_load(self, table: TTableSchema, file_path: str) -> LoadJob:
         pass
 
     @abstractmethod
@@ -93,11 +72,6 @@ class JobClientBase(ABC):
 
     @abstractmethod
     def complete_load(self, load_id: str) -> None:
-        pass
-
-    @property
-    @abstractmethod
-    def capabilities(self) -> TJobClientCapabilities:
         pass
 
     @abstractmethod
@@ -120,13 +94,22 @@ class JobClientBase(ABC):
     def make_absolute_path(file_path: str) -> str:
         return str(Path(file_path).absolute())
 
+    @classmethod
+    @abstractmethod
+    def capabilities(cls) -> TLoaderCapabilities:
+        pass
+
+    @classmethod
+    @abstractmethod
+    def configure(cls, initial_values: StrAny = None) -> Type[BaseConfiguration]:
+        pass
+
 
 class SqlClientBase(ABC, Generic[TNativeConn]):
-    def __init__(self, default_schema_name: str) -> None:
-        if not default_schema_name:
-            raise ValueError(default_schema_name)
-        self._qualified_default_schema_name: str = None
-        self._qualified_default_schema_name = self.fully_qualified_schema_name(default_schema_name)
+    def __init__(self, default_dataset_name: str) -> None:
+        if not default_dataset_name:
+            raise ValueError(default_dataset_name)
+        self.default_dataset_name = default_dataset_name
 
     @abstractmethod
     def open_connection(self) -> None:
@@ -148,15 +131,15 @@ class SqlClientBase(ABC, Generic[TNativeConn]):
         pass
 
     @abstractmethod
-    def has_schema(self, qualified_schema_name: str = None) -> bool:
+    def has_dataset(self) -> bool:
         pass
 
     @abstractmethod
-    def create_schema(self, qualified_schema_name: str = None) -> None:
+    def create_dataset(self) -> None:
         pass
 
     @abstractmethod
-    def drop_schema(self, qualified_schema_name: str = None) -> None:
+    def drop_dataset(self) -> None:
         pass
 
     @abstractmethod
@@ -168,11 +151,21 @@ class SqlClientBase(ABC, Generic[TNativeConn]):
         pass
 
     @abstractmethod
-    def fully_qualified_schema_name(self, schema_name: str = None) -> str:
+    def fully_qualified_dataset_name(self) -> str:
         pass
 
-    def fully_qualified_table_name(self, table_name: str) -> str:
-        return f"{self.fully_qualified_schema_name()}.{table_name}"
+    def make_qualified_table_name(self, table_name: str) -> str:
+        return f"{self.fully_qualified_dataset_name()}.{table_name}"
+
+    @contextmanager
+    def with_alternative_dataset_name(self, dataset_name: str) -> Iterator["SqlClientBase[TNativeConn]"]:
+        current_dataset_name = self.default_dataset_name
+        try:
+            self.default_dataset_name = dataset_name
+            yield self
+        finally:
+            # restore previous dataset name
+            self.default_dataset_name = current_dataset_name
 
 
 class SqlJobClientBase(JobClientBase):
@@ -188,7 +181,7 @@ class SqlJobClientBase(JobClientBase):
             self._update_schema_version(self.schema.schema_version)
 
     def complete_load(self, load_id: str) -> None:
-        name = self.sql_client.fully_qualified_table_name(Schema.LOADS_TABLE_NAME)
+        name = self.sql_client.make_qualified_table_name(Schema.LOADS_TABLE_NAME)
         now_ts = str(pendulum.now())
         self.sql_client.execute_sql(f"INSERT INTO {name}(load_id, status, inserted_at) VALUES('{load_id}', 0, '{now_ts}');")
 
@@ -203,22 +196,22 @@ class SqlJobClientBase(JobClientBase):
     def _build_schema_update_sql(self) -> List[str]:
         pass
 
-    def _create_table_update(self, table_name: str, storage_table: TTableColumns) -> Sequence[TColumn]:
+    def _create_table_update(self, table_name: str, storage_table: TTableSchemaColumns) -> Sequence[TColumnSchema]:
         # compare table with stored schema and produce delta
         updates = self.schema.get_schema_update_for(table_name, storage_table)
         logger.info(f"Found {len(updates)} updates for {table_name} in {self.schema.schema_name}")
         return updates
 
     def _get_schema_version_from_storage(self) -> int:
-        name = self.sql_client.fully_qualified_table_name(Schema.VERSION_TABLE_NAME)
+        name = self.sql_client.make_qualified_table_name(Schema.VERSION_TABLE_NAME)
         rows = self.sql_client.execute_sql(f"SELECT {Schema.VERSION_COLUMN_NAME} FROM {name} ORDER BY inserted_at DESC LIMIT 1;")
         if len(rows) > 1:
-            raise LoadClientSchemaVersionCorrupted(self.sql_client._qualified_default_schema_name)
+            raise LoadClientSchemaVersionCorrupted(self.sql_client.fully_qualified_dataset_name())
         if len(rows) == 0:
             return 0
         return int(rows[0][0])
 
     def _update_schema_version(self, new_version: int) -> None:
         now_ts = str(pendulum.now())
-        name = self.sql_client.fully_qualified_table_name(Schema.VERSION_TABLE_NAME)
+        name = self.sql_client.make_qualified_table_name(Schema.VERSION_TABLE_NAME)
         self.sql_client.execute_sql(f"INSERT INTO {name}({Schema.VERSION_COLUMN_NAME}, engine_version, inserted_at) VALUES ({new_version}, {Schema.ENGINE_VERSION}, '{now_ts}');")

@@ -5,7 +5,7 @@ import logging
 from os import environ
 
 from dlt.common.configuration.utils import _get_config_attrs_with_hints, make_configuration
-from dlt.common.configuration import BasicConfiguration
+from dlt.common.configuration import RunConfiguration
 from dlt.common.logger import init_logging_from_config
 from dlt.common.file_storage import FileStorage
 from dlt.common.schema import Schema
@@ -45,29 +45,37 @@ def autouse_root_storage() -> FileStorage:
     return clean_storage()
 
 
-def init_logger(C: Type[BasicConfiguration] = None) -> None:
+@pytest.fixture(scope="module", autouse=True)
+def preserve_environ() -> None:
+    saved_environ = environ.copy()
+    yield
+    environ.clear()
+    environ.update(saved_environ)
+
+
+def init_logger(C: Type[RunConfiguration] = None) -> None:
     if not hasattr(logging, "health"):
         if not C:
-            C = make_configuration(BasicConfiguration, BasicConfiguration)
+            C = make_configuration(RunConfiguration, RunConfiguration)
         init_logging_from_config(C)
 
 
-def clean_storage(init_unpacker: bool = False, init_loader: bool = False) -> FileStorage:
+def clean_storage(init_normalize: bool = False, init_loader: bool = False) -> FileStorage:
     storage = FileStorage(TEST_STORAGE, "t", makedirs=True)
     storage.delete_folder("", recursively=True)
     storage.create_folder(".")
-    if init_unpacker:
-        from dlt.common.storages.unpacker_storage import UnpackerStorage
-        from dlt.common.configuration import UnpackingVolumeConfiguration
-        UnpackerStorage(True, UnpackingVolumeConfiguration)
+    if init_normalize:
+        from dlt.common.storages.normalize_storage import NormalizeStorage
+        from dlt.common.configuration import NormalizeVolumeConfiguration
+        NormalizeStorage(True, NormalizeVolumeConfiguration)
     if init_loader:
         from dlt.common.storages.loader_storage import LoaderStorage
         from dlt.common.configuration import LoadingVolumeConfiguration
-        LoaderStorage(True, LoadingVolumeConfiguration, "jsonl")
+        LoaderStorage(True, LoadingVolumeConfiguration, "jsonl", LoaderStorage.ALL_SUPPORTED_FILE_FORMATS)
     return storage
 
 
-def add_config_to_env(config: Type[BasicConfiguration]) ->  None:
+def add_config_to_env(config: Type[RunConfiguration]) ->  None:
     # write back default values in configuration back into environment
     possible_attrs = _get_config_attrs_with_hints(config).keys()
     for attr in possible_attrs:

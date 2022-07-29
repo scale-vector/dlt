@@ -6,12 +6,12 @@ from dlt.common.utils import uniq_id
 from dlt.common.schema import normalize_schema_name
 from dlt.common.file_storage import FileStorage
 from dlt.common.storages.versioned_storage import VersionedStorage
-from dlt.common.storages.unpacker_storage import UnpackerStorage
+from dlt.common.storages.normalize_storage import NormalizeStorage
 
 
 class ExtractorStorageBase(VersionedStorage):
-    def __init__(self, version: semver.VersionInfo, is_owner: bool, storage: FileStorage, unpacker_storage: UnpackerStorage) -> None:
-        self.unpacker_storage = unpacker_storage
+    def __init__(self, version: semver.VersionInfo, is_owner: bool, storage: FileStorage, normalize_storage: NormalizeStorage) -> None:
+        self.normalize_storage = normalize_storage
         super().__init__(version, is_owner, storage)
 
     def create_temp_folder(self) -> str:
@@ -28,12 +28,12 @@ class ExtractorStorageBase(VersionedStorage):
         if schema_name != normalize_schema_name(schema_name):
             raise ValueError(schema_name)
 
-        dest_name = UnpackerStorage.build_unpack_file_name(schema_name, dest_file_stem, no_processed_events, load_id)
+        dest_name = NormalizeStorage.build_extracted_file_name(schema_name, dest_file_stem, no_processed_events, load_id)
         # if no events extracted from tracker, file is not saved
         if no_processed_events > 0:
             # moves file to possibly external storage and place in the dest folder atomically
             self.storage.copy_cross_storage_atomically(
-                self.unpacker_storage.storage.storage_path, UnpackerStorage.UNPACKING_FOLDER, processed_file_path, dest_name)
+                self.normalize_storage.storage.storage_path, NormalizeStorage.EXTRACTED_FOLDER, processed_file_path, dest_name)
 
         if with_delete:
             self.storage.delete(processed_file_path)

@@ -1,10 +1,11 @@
 import jsonlines
+from datetime import date, datetime  # noqa: I251
 from typing import Any, Iterable, Literal, Sequence, IO
 
 from dlt.common import json
 from dlt.common.typing import StrAny
 
-TWriterType = Literal["jsonl", "insert_values"]
+TLoaderFileFormat = Literal["jsonl", "insert_values"]
 
 
 def write_jsonl(f: IO[Any], rows: Sequence[Any]) -> None:
@@ -24,6 +25,8 @@ def write_insert_values(f: IO[Any], rows: Sequence[StrAny], headers: Iterable[st
     def stringify(v: Any) -> str:
         if isinstance(v, bytes):
            return f"from_hex('{v.hex()}')"
+        if isinstance(v, (datetime, date)):
+            return escape_redshift_literal(v.isoformat())
         else:
             return str(v)
 

@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict, Type
 
 from dlt.common.json import json
 from dlt.common.typing import DictStrAny, DictStrStr, StrStr
-from dlt.common.configuration import BasicConfiguration
+from dlt.common.configuration import RunConfiguration
 from dlt.common.utils import filter_env_vars
 from dlt._version import common_version as __version__
 
@@ -117,8 +117,8 @@ def __getattr__(name: str) -> Callable[..., Any]:
     return wrapper
 
 
-def _extract_version_info(config: Type[BasicConfiguration]) -> StrStr:
-    version_info = {"version": __version__, "component_name": config.NAME}
+def _extract_version_info(config: Type[RunConfiguration]) -> StrStr:
+    version_info = {"version": __version__, "component_name": config.PIPELINE_NAME}
     version = getattr(config, "_VERSION", None)
     if version:
         version_info["component_version"] = version
@@ -140,7 +140,7 @@ class _SentryHttpTransport(HttpTransport):
         return rv
 
 
-def _init_sentry(config: Type[BasicConfiguration], version: StrStr) -> None:
+def _init_sentry(config: Type[RunConfiguration], version: StrStr) -> None:
     if config.SENTRY_DSN:
         sys_ver = version["version"]
         release = sys_ver + "_" + version.get("commit_sha", "")
@@ -157,7 +157,7 @@ def _init_sentry(config: Type[BasicConfiguration], version: StrStr) -> None:
             sentry_sdk.set_tag(k, v)
 
 
-def init_telemetry(config: Type[BasicConfiguration]) -> None:
+def init_telemetry(config: Type[RunConfiguration]) -> None:
     if config.PROMETHEUS_PORT:
         from prometheus_client import start_http_server, Info
 
@@ -167,7 +167,7 @@ def init_telemetry(config: Type[BasicConfiguration]) -> None:
         Info("runs_component_name", "Name of the executing component").info(_extract_version_info(config))
 
 
-def init_logging_from_config(C: Type[BasicConfiguration]) -> None:
+def init_logging_from_config(C: Type[RunConfiguration]) -> None:
     global LOGGER
 
     # add HEALTH and METRICS log levels
@@ -180,7 +180,7 @@ def init_logging_from_config(C: Type[BasicConfiguration]) -> None:
         DLT_LOGGER_NAME,
         C.LOG_LEVEL,
         C.LOG_FORMAT,
-        C.NAME,
+        C.PIPELINE_NAME,
         version)
     _init_sentry(C, version)
 

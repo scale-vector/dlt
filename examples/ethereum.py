@@ -48,5 +48,5 @@ i = get_source("https://mainnet.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161", 
 pipeline.extract(map(from_wei_to_eth, i), table_name="blocks")
 print(pipeline.state)
 
-# this will unpack and load all extracted data
+# this will normalize and load all extracted data
 pipeline.flush()

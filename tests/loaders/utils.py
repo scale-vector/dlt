@@ -1,20 +1,20 @@
+import os
 from typing import Any, Iterable, Iterator, List, Sequence, cast, IO
 
 from dlt.common import json, Decimal
 from dlt.common.dataset_writers import write_insert_values, write_jsonl
 from dlt.common.file_storage import FileStorage
-from dlt.common.schema import TColumn, TTableColumns
+from dlt.common.schema import TColumnSchema, TTableSchemaColumns
 from dlt.common.storages.schema_storage import SchemaStorage
 from dlt.common.schema.utils import new_table
 from dlt.common.time import sleep
 from dlt.common.typing import StrAny
 from dlt.common.utils import uniq_id
 
-from dlt.loaders.loader import import_client, get_load_table
-from dlt.loaders.configuration import LoaderConfiguration, configuration
+from dlt.loaders.loader import get_load_table, import_client_cls
 from dlt.loaders.client_base import JobClientBase, LoadJob, SqlJobClientBase
 
-TABLE_UPDATE: List[TColumn] = [
+TABLE_UPDATE: List[TColumnSchema] = [
     {
         "name": "col1",
         "data_type": "bigint",
@@ -74,9 +74,9 @@ TABLE_ROW = {
     "col9": "{complex: [1,2,3]}"
 }
 
-def load_table(name: str) -> TTableColumns:
+def load_table(name: str) -> TTableSchemaColumns:
     with open(f"./tests/loaders/cases/{name}.json", "tr", encoding="utf-8") as f:
-        return cast(TTableColumns, json.load(f))
+        return cast(TTableSchemaColumns, json.load(f))
 
 
 def expect_load_file(client: JobClientBase, file_storage: FileStorage, query: str, table_name: str, status = "completed") -> LoadJob:
@@ -101,28 +101,25 @@ def prepare_event_user_table(client: JobClientBase) -> None:
 
 
 def yield_client_with_storage(client_type: str) -> Iterator[SqlJobClientBase]:
+    os.environ.pop("DEFAULT_DATASET", None)
     # create dataset with random name
-    schema_prefix = "test_" + uniq_id()
-    CLIENT_CONFIG: LoaderConfiguration = configuration({"CLIENT_TYPE": client_type})
-    if client_type == "gcp":
-        CLIENT_CONFIG.DATASET = schema_prefix
-    else:
-        CLIENT_CONFIG.PG_SCHEMA_PREFIX = schema_prefix
+    default_dataset = "test_" + uniq_id()
+    initial_values = {"DEFAULT_DATASET": default_dataset}
     # get event default schema
     schema_storage = SchemaStorage("tests/common/cases/schemas/rasa")
     schema = schema_storage.load_store_schema("event")
     # create client and dataset
     client: SqlJobClientBase = None
-    with import_client(client_type).make_client(schema, CLIENT_CONFIG) as client:
+    with import_client_cls(client_type, initial_values=initial_values)(schema) as client:
         client.initialize_storage()
         yield client
-        client.sql_client.drop_schema()
+        client.sql_client.drop_dataset()
 
 
 def write_dataset(client: JobClientBase, f: IO[Any], rows: Sequence[StrAny], headers: Iterable[str]) -> None:
-    if client.capabilities["writer_type"] == "jsonl":
+    if client.capabilities()["preferred_loader_file_format"] == "jsonl":
         write_jsonl(f, rows)
-    elif client.capabilities["writer_type"] == "insert_values":
+    elif client.capabilities()["preferred_loader_file_format"] == "insert_values":
         write_insert_values(f, rows, headers)
     else:
-        raise ValueError(client.capabilities["writer_type"])
+        raise ValueError(client.capabilities()["preferred_loader_file_format"])

@@ -1,7 +1,6 @@
-from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, AnyStr, Dict, Iterator, List, Literal, Optional, Sequence, Tuple, Type
-from dlt.common.schema.typing import TTable, TWriteDisposition
+from contextlib import contextmanager
+from typing import Any, AnyStr, Dict, Iterator, List, Optional, Sequence, Tuple, Type
 import google.cloud.bigquery as bigquery  # noqa: I250
 from google.cloud.bigquery.dbapi import Connection as DbApiConnection
 from google.cloud import exceptions as gcp_exceptions
@@ -10,13 +9,15 @@ from google.api_core import exceptions as api_core_exceptions
 
 
 from dlt.common import json, logger
+from dlt.common.typing import StrAny
+from dlt.common.schema.typing import TTableSchema, TWriteDisposition
 from dlt.common.arithmetics import DEFAULT_NUMERIC_PRECISION, DEFAULT_NUMERIC_SCALE
-from dlt.common.configuration import GcpClientConfiguration
-from dlt.common.dataset_writers import TWriterType, escape_bigquery_identifier
-from dlt.loaders.local_types import LoadJobStatus
-from dlt.common.schema import TColumn, TDataType, Schema, TTableColumns
+from dlt.common.configuration import GcpClientConfiguration, GcpClientProductionConfiguration, make_configuration
+from dlt.common.dataset_writers import TLoaderFileFormat, escape_bigquery_identifier
+from dlt.common.schema import TColumnSchema, TDataType, Schema, TTableSchemaColumns
 
-from dlt.loaders.client_base import JobClientBase, SqlClientBase, SqlJobClientBase, LoadJob, DBCursor, TJobClientCapabilities
+from dlt.loaders.typing import LoadJobStatus, DBCursor, TLoaderCapabilities
+from dlt.loaders.client_base import JobClientBase, SqlClientBase, SqlJobClientBase, LoadJob
 from dlt.loaders.exceptions import LoadClientSchemaWillNotUpdate, LoadJobNotExistsException, LoadJobServerTerminalException, LoadUnknownTableException
 
 SCT_TO_BQT: Dict[TDataType, str] = {
@@ -44,12 +45,12 @@ BQT_TO_SCT: Dict[str, TDataType] = {
 
 
 class BigQuerySqlClient(SqlClientBase[bigquery.Client]):
-    def __init__(self, schema_name: str, CREDENTIALS: Type[GcpClientConfiguration]) -> None:
+    def __init__(self, default_dataset_name: str, CREDENTIALS: Type[GcpClientConfiguration]) -> None:
         self._client: bigquery.Client = None
         self.C = CREDENTIALS
-        super().__init__(schema_name)
+        super().__init__(default_dataset_name)
         self.default_retry = bigquery.DEFAULT_RETRY.with_deadline(CREDENTIALS.TIMEOUT)
-        self.default_query = bigquery.QueryJobConfig(default_dataset=self.fully_qualified_schema_name())
+        self.default_query = bigquery.QueryJobConfig(default_dataset=self.fully_qualified_dataset_name())
 
     def open_connection(self) -> None:
         credentials = service_account.Credentials.from_service_account_info(self.C.to_service_credentials())
@@ -64,21 +65,29 @@ class BigQuerySqlClient(SqlClientBase[bigquery.Client]):
     def native_connection(self) -> bigquery.Client:
         return self._client
 
-    def has_schema(self, schema_name: str = None) -> bool:
-        dataset_name = self.fully_qualified_schema_name(schema_name)
+    def has_dataset(self) -> bool:
         try:
-            self._client.get_dataset(dataset_name, retry=self.default_retry, timeout=self.C.TIMEOUT)
+            self._client.get_dataset(self.fully_qualified_dataset_name(), retry=self.default_retry, timeout=self.C.TIMEOUT)
             return True
         except gcp_exceptions.NotFound:
             return False
 
-    def create_schema(self, schema_name: str = None) -> None:
-        schema_name = self.fully_qualified_schema_name(schema_name)
-        self._client.create_dataset(schema_name, exists_ok=False, retry=self.default_retry, timeout=self.C.TIMEOUT)
+    def create_dataset(self) -> None:
+        self._client.create_dataset(
+            self.fully_qualified_dataset_name(),
+            exists_ok=False,
+            retry=self.default_retry,
+            timeout=self.C.TIMEOUT
+        )
 
-    def drop_schema(self, schema_name: str = None) -> None:
-        schema_name = self.fully_qualified_schema_name(schema_name)
-        self._client.delete_dataset(schema_name, not_found_ok=True, delete_contents=True, retry=self.default_retry, timeout=self.C.TIMEOUT)
+    def drop_dataset(self) -> None:
+        self._client.delete_dataset(
+            self.fully_qualified_dataset_name(),
+            not_found_ok=True,
+            delete_contents=True,
+            retry=self.default_retry,
+            timeout=self.C.TIMEOUT
+        )
 
     def execute_sql(self, sql: AnyStr, *args: Any, **kwargs: Any) -> Optional[Sequence[Sequence[Any]]]:
         logger.debug(f"Will execute query {sql}")  # type: ignore
@@ -113,11 +122,8 @@ class BigQuerySqlClient(SqlClientBase[bigquery.Client]):
                 # will also close all cursors
                 conn.close()
 
-    def fully_qualified_schema_name(self, schema_name: str = None) -> str:
-        if schema_name:
-            return f"{self.C.PROJECT_ID}.{schema_name}"
-        else:
-            return self._qualified_default_schema_name
+    def fully_qualified_dataset_name(self) -> str:
+        return f"{self.C.PROJECT_ID}.{self.default_dataset_name}"
 
 
 class BigQueryLoadJob(LoadJob):
@@ -154,34 +160,36 @@ class BigQueryLoadJob(LoadJob):
 
 
 class BigQueryClient(SqlJobClientBase):
-    def __init__(self, schema: Schema, CONFIG: Type[GcpClientConfiguration]) -> None:
-        sql_client = BigQuerySqlClient(schema.normalize_make_schema_name(CONFIG.DATASET, schema.schema_name), CONFIG)
+
+    CONFIG: Type[GcpClientConfiguration] = None
+
+    def __init__(self, schema: Schema) -> None:
+        sql_client = BigQuerySqlClient(schema.normalize_make_dataset_name(self.CONFIG.DEFAULT_DATASET, schema.schema_name), self.CONFIG)
         super().__init__(schema, sql_client)
         self.sql_client: BigQuerySqlClient = sql_client
-        self.C = CONFIG
 
     def initialize_storage(self) -> None:
-        if not self.sql_client.has_schema():
-            self.sql_client.create_schema()
+        if not self.sql_client.has_dataset():
+            self.sql_client.create_dataset()
 
     def restore_file_load(self, file_path: str) -> LoadJob:
         try:
             return BigQueryLoadJob(
                 JobClientBase.get_file_name_from_file_path(file_path),
                 self._retrieve_load_job(file_path),
-                self.C
+                self.CONFIG
             )
         except api_core_exceptions.NotFound:
             raise LoadJobNotExistsException(file_path)
         except (api_core_exceptions.BadRequest, api_core_exceptions.NotFound):
             raise LoadJobServerTerminalException(file_path)
 
-    def start_file_load(self, table: TTable, file_path: str) -> LoadJob:
+    def start_file_load(self, table: TTableSchema, file_path: str) -> LoadJob:
         try:
             return BigQueryLoadJob(
                 JobClientBase.get_file_name_from_file_path(file_path),
                 self._create_load_job(table["name"], table["write_disposition"], file_path),
-                self.C
+                self.CONFIG
             )
         except api_core_exceptions.NotFound:
             # google.api_core.exceptions.NotFound: 404 - table not found
@@ -192,12 +200,6 @@ class BigQueryClient(SqlJobClientBase):
         except api_core_exceptions.Conflict:
             # google.api_core.exceptions.Conflict: 409 PUT - already exists
             return self.restore_file_load(file_path)
-
-    @property
-    def capabilities(self) -> TJobClientCapabilities:
-        return {
-            "writer_type": supported_writer(self.C)
-        }
 
     def _get_schema_version_from_storage(self) -> int:
         try:
@@ -215,13 +217,13 @@ class BigQueryClient(SqlJobClientBase):
                 sql_updates.append(sql)
         return sql_updates
 
-    def _get_table_update_sql(self, table_name: str, storage_table: TTableColumns, exists: bool) -> str:
+    def _get_table_update_sql(self, table_name: str, storage_table: TTableSchemaColumns, exists: bool) -> str:
         new_columns = self._create_table_update(table_name, storage_table)
         if len(new_columns) == 0:
             # no changes
             return None
         # build sql
-        canonical_name = self.sql_client.fully_qualified_table_name(table_name)
+        canonical_name = self.sql_client.make_qualified_table_name(table_name)
         if not exists:
             # build CREATE
             sql = f"CREATE TABLE {canonical_name} (\n"
@@ -250,19 +252,19 @@ class BigQueryClient(SqlJobClientBase):
 
         return sql
 
-    def _get_column_def_sql(self, c: TColumn) -> str:
+    def _get_column_def_sql(self, c: TColumnSchema) -> str:
         name = escape_bigquery_identifier(c["name"])
         return f"{name} {self._sc_t_to_bq_t(c['data_type'])} {self._gen_not_null(c['nullable'])}"
 
-    def _get_storage_table(self, table_name: str) -> Tuple[bool, TTableColumns]:
-        schema_table: TTableColumns = {}
+    def _get_storage_table(self, table_name: str) -> Tuple[bool, TTableSchemaColumns]:
+        schema_table: TTableSchemaColumns = {}
         try:
             table = self.sql_client.native_connection.get_table(
-                self.sql_client.fully_qualified_table_name(table_name), retry=self.sql_client.default_retry, timeout=self.C.TIMEOUT
+                self.sql_client.make_qualified_table_name(table_name), retry=self.sql_client.default_retry, timeout=self.CONFIG.TIMEOUT
             )
             partition_field = table.time_partitioning.field if table.time_partitioning else None
             for c in table.schema:
-                schema_c: TColumn = {
+                schema_c: TColumnSchema = {
                     "name": c.name,
                     "nullable": c.is_nullable,
                     "data_type": self._bq_t_to_sc_t(c.field_type, c.precision, c.scale),
@@ -292,10 +294,10 @@ class BigQueryClient(SqlJobClientBase):
             )
         with open(file_path, "rb") as f:
             return self.sql_client.native_connection.load_table_from_file(f,
-                                                     self.sql_client.fully_qualified_table_name(table_name),
+                                                     self.sql_client.make_qualified_table_name(table_name),
                                                      job_id=job_id,
                                                      job_config=job_config,
-                                                     timeout=self.C.TIMEOUT
+                                                     timeout=self.CONFIG.TIMEOUT
                                                     )
 
     def _retrieve_load_job(self, file_path: str) -> bigquery.LoadJob:
@@ -321,10 +323,17 @@ class BigQueryClient(SqlJobClientBase):
                 return "wei"
         return BQT_TO_SCT.get(bq_t, "text")
 
+    @classmethod
+    def capabilities(cls) -> TLoaderCapabilities:
+        return {
+            "preferred_loader_file_format": "jsonl",
+            "supported_loader_file_formats": ["jsonl"]
+        }
 
-def make_client(schema: Schema, C: Type[GcpClientConfiguration]) -> BigQueryClient:
-    return BigQueryClient(schema, C)
+    @classmethod
+    def configure(cls, initial_values: StrAny = None) -> Type[GcpClientConfiguration]:
+        cls.CONFIG = make_configuration(GcpClientConfiguration, GcpClientProductionConfiguration, initial_values=initial_values)
+        return cls.CONFIG
 
 
-def supported_writer(C: Type[GcpClientConfiguration]) -> TWriterType:
-    return "jsonl"
+CLIENT = BigQueryClient

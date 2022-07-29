@@ -116,7 +116,7 @@
   "normalizers": {
     "names": "dlt.common.normalizers.names.snake_case",
     "json": {
-      "module": "tests.unpacker.mock_rasa_json_normalizer",
+      "module": "tests.normalize.mock_rasa_json_normalizer",
       "config": {
         "propagation": {
           "root": {

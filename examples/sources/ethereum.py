@@ -94,7 +94,7 @@ def _get_block(w3: Web3, current_block: int, chain_id: int) -> DictStrAny:
     for tx in transactions:
         if "accessList" in tx and len(tx["accessList"]) > 0:
             tx["accessList"] = [dict(al) for al in tx["accessList"]]
-        # propagate sorting and clustering info (we could also do it in unpacker: TODO:!)
+        # propagate sorting and clustering info (we could also do it in normalize: TODO:!)
         tx["block_timestamp"] = block["timestamp"]
 
         # overwrite chain_id which is not provided in all cases

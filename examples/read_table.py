@@ -20,9 +20,9 @@ items = get_source("select *  from mainnet_2_ethereum.blocks__transactions limit
 #     for k, v in i.items():
 #         print(f"{k}:{v} ({type(v)}:{Schema._py_type_to_sc_type(type(v))})")
 
-# unpack and display schema
+# normalize and display schema
 p = Pipeline("mydb")
 p.create_pipeline(credentials)
 p.extract(items, table_name="blocks__transactions")
-p.unpack()
+p.normalize()
 print(p.get_default_schema().as_yaml(remove_defaults=True))

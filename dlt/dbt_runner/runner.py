@@ -92,7 +92,7 @@ def log_dbt_run_results(results: dbt_results.RunExecutionResult) -> None:
         message = res.message
         time = res.execution_time
         if res.status == dbt_results.RunStatus.Error:
-            logger.error(f"Model {name} errored! Error: {message}")
+            logger.error(f"Model {name} error! Error: {message}")
         else:
             logger.info(f"Model {name} {res.status} in {time} seconds with {message}")
         model_elapsed_gauge.labels(name).set(time)

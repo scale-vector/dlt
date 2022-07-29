@@ -1,6 +1,6 @@
 from collections import abc
 from functools import wraps
-from typing import Any, Callable, Iterable, Iterator, Literal, Optional, Sequence, TypeVar, Union, TypedDict, cast
+from typing import Any, Callable, Optional, Sequence, TypeVar, Union, TypedDict
 try:
     from typing_extensions import ParamSpec
 except ImportError:
@@ -8,13 +8,13 @@ except ImportError:
 
 from dlt.common import logger
 from dlt.common.time import sleep
-from dlt.common.typing import DictStrAny, StrAny
+from dlt.common.typing import StrAny, TDataItem
 
 
 # possible types of items yielded by the source
 # 1. document (mapping from str to any type)
 # 2. Iterable (ie list) on the mapping above for returning many documents with single yield
-TItem = Union[DictStrAny, Sequence[DictStrAny]]
+TItem = Union[TDataItem, Sequence[TDataItem]]
 TBoundItem = TypeVar("TBoundItem", bound=TItem)
 TDeferred = Callable[[], TBoundItem]
 
@@ -25,7 +25,7 @@ DLT_METADATA_FIELD = "_dlt_meta"
 
 
 class TEventDLTMeta(TypedDict, total=False):
-    table_name: str  # a root table to which unpack the event
+    table_name: str  # a root table in which store the event
 
 
 def append_dlt_meta(item: TBoundItem, name: str, value: Any) -> TBoundItem:

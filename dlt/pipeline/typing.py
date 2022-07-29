@@ -7,7 +7,7 @@ from dlt.common.typing import StrAny
 from dlt.common.configuration.utils import TSecretValue
 
 TLoaderType = Literal["gcp", "redshift"]
-TPipelineStage = Literal["extract", "unpack", "load"]
+TPipelineStage = Literal["extract", "normalize", "load"]
 
 # extractor generator yields functions that returns list of items of the type (table) when called
 # this allows generator to implement retry logic
@@ -22,28 +22,28 @@ class PipelineCredentials:
     CLIENT_TYPE: TLoaderType
 
     @property
-    def schema_prefix(self) -> str:
+    def default_dataset(self) -> str:
         pass
 
-    @schema_prefix.setter
-    def schema_prefix(self, new_value: str) -> None:
+    @default_dataset.setter
+    def default_dataset(self, new_value: str) -> None:
         pass
 
 @dataclass
 class GCPPipelineCredentials(PipelineCredentials):
     PROJECT_ID: str
-    DATASET: str
+    DEFAULT_DATASET: str
     BQ_CRED_CLIENT_EMAIL: str
     BQ_CRED_PRIVATE_KEY: TSecretValue = None
     TIMEOUT: float = 30.0
 
     @property
-    def schema_prefix(self) -> str:
-        return self.DATASET
+    def default_dataset(self) -> str:
+        return self.DEFAULT_DATASET
 
-    @schema_prefix.setter
-    def schema_prefix(self, new_value: str) -> None:
-        self.DATASET = new_value
+    @default_dataset.setter
+    def default_dataset(self, new_value: str) -> None:
+        self.DEFAULT_DATASET = new_value
 
     @classmethod
     def from_services_dict(cls, services: StrAny, dataset_prefix: str) -> "GCPPipelineCredentials":
@@ -61,7 +61,7 @@ class GCPPipelineCredentials(PipelineCredentials):
 @dataclass
 class PostgresPipelineCredentials(PipelineCredentials):
     PG_DATABASE_NAME: str
-    PG_SCHEMA_PREFIX: str
+    DEFAULT_DATASET: str
     PG_USER: str
     PG_HOST: str
     PG_PASSWORD: TSecretValue = None
@@ -69,9 +69,9 @@ class PostgresPipelineCredentials(PipelineCredentials):
     PG_CONNECTION_TIMEOUT: int = 15
 
     @property
-    def schema_prefix(self) -> str:
-        return self.PG_SCHEMA_PREFIX
+    def default_dataset(self) -> str:
+        return self.DEFAULT_DATASET
 
-    @schema_prefix.setter
-    def schema_prefix(self, new_value: str) -> None:
-        self.PG_SCHEMA_PREFIX = new_value
+    @default_dataset.setter
+    def default_dataset(self, new_value: str) -> None:
+        self.DEFAULT_DATASET = new_value

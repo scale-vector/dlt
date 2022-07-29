@@ -1,9 +1,11 @@
 from dlt.common.typing import StrStr
+from dlt.common.configuration import BaseConfiguration
 from dlt.common.configuration.utils import TSecretValue
 
-class GcpClientConfiguration:
+class GcpClientConfiguration(BaseConfiguration):
+    DEFAULT_DATASET: str = None
+
     PROJECT_ID: str = None
-    DATASET: str = None
     TIMEOUT: float = 30.0
     BQ_CRED_TYPE: str = "service_account"
     BQ_CRED_PRIVATE_KEY: TSecretValue = None
@@ -28,7 +30,4 @@ class GcpClientConfiguration:
 
 
 class GcpClientProductionConfiguration(GcpClientConfiguration):
-    PROJECT_ID: str = None
-    DATASET: str = None
-    BQ_CRED_PRIVATE_KEY: TSecretValue = None
-    BQ_CRED_CLIENT_EMAIL: str = None
+    pass

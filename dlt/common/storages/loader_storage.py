@@ -1,13 +1,13 @@
 import os
 from pathlib import Path
-from typing import List, Literal, Optional, Sequence, Tuple, Type, get_args
+from typing import Iterable, Literal, Optional, Sequence, Set, Tuple, Type, get_args
 
 from dlt.common import json, pendulum
 from dlt.common.file_storage import FileStorage
-from dlt.common.dataset_writers import TWriterType, write_jsonl, write_insert_values
+from dlt.common.dataset_writers import TLoaderFileFormat, write_jsonl, write_insert_values
 from dlt.common.configuration import LoadingVolumeConfiguration
 from dlt.common.exceptions import TerminalValueError
-from dlt.common.schema import TSchemaUpdate, TTableColumns
+from dlt.common.schema import TSchemaUpdate, TTableSchemaColumns
 from dlt.common.storages.versioned_storage import VersionedStorage
 from dlt.common.typing import StrAny
 
@@ -30,12 +30,21 @@ class LoaderStorage(VersionedStorage):
 
     LOAD_SCHEMA_UPDATE_FILE_NAME = "schema_updates.json"
 
-    SUPPORTED_WRITERS: Sequence[TWriterType] = get_args(TWriterType)
+    ALL_SUPPORTED_FILE_FORMATS: Set[TLoaderFileFormat] = set(get_args(TLoaderFileFormat))
 
-    def __init__(self, is_owner: bool,  C: Type[LoadingVolumeConfiguration], writer_type: TWriterType) -> None:
-        if writer_type not in LoaderStorage.SUPPORTED_WRITERS:
-            raise TerminalValueError(writer_type)
-        self.writer_type = writer_type
+    def __init__(
+        self,
+        is_owner: bool,
+        C: Type[LoadingVolumeConfiguration],
+        preferred_file_format: TLoaderFileFormat,
+        supported_file_formats: Iterable[TLoaderFileFormat]
+    ) -> None:
+        if not LoaderStorage.ALL_SUPPORTED_FILE_FORMATS.issuperset(supported_file_formats):
+            raise TerminalValueError(supported_file_formats)
+        if preferred_file_format not in supported_file_formats:
+            raise TerminalValueError(preferred_file_format)
+        self.preferred_file_format = preferred_file_format
+        self.supported_file_formats = supported_file_formats
         self.delete_completed_jobs = C.DELETE_COMPLETED_JOBS
         super().__init__(LoaderStorage.STORAGE_VERSION, is_owner, FileStorage(C.LOADING_VOLUME_PATH, "t", makedirs=is_owner))
 
@@ -54,12 +63,12 @@ class LoaderStorage(VersionedStorage):
         self.storage.create_folder(f"{load_id}/{LoaderStorage.FAILED_JOBS_FOLDER}")
         self.storage.create_folder(f"{load_id}/{LoaderStorage.STARTED_JOBS_FOLDER}")
 
-    def write_temp_loading_file(self, load_id: str, table_name: str, table: TTableColumns, file_id: str, rows: Sequence[StrAny]) -> str:
+    def write_temp_loading_file(self, load_id: str, table_name: str, table: TTableSchemaColumns, file_id: str, rows: Sequence[StrAny]) -> str:
         file_name = self.build_loading_file_name(load_id, table_name, file_id)
         with self.storage.open_file(file_name, mode="w") as f:
-            if self.writer_type == "jsonl":
+            if self.preferred_file_format == "jsonl":
                 write_jsonl(f, rows)
-            elif self.writer_type == "insert_values":
+            elif self.preferred_file_format == "insert_values":
                 write_insert_values(f, rows, table.keys())
         return Path(file_name).name
 
@@ -83,9 +92,9 @@ class LoaderStorage(VersionedStorage):
     def list_new_jobs(self, load_id: str) -> Sequence[str]:
         new_jobs = self.storage.list_folder_files(f"{self.get_load_path(load_id)}/{LoaderStorage.NEW_JOBS_FOLDER}")
         # make sure all jobs have supported writers
-        wrong_job = next((j for j in new_jobs if LoaderStorage.parse_load_file_name(j)[1] != self.writer_type), None)
+        wrong_job = next((j for j in new_jobs if LoaderStorage.parse_load_file_name(j)[1] not in self.supported_file_formats), None)
         if wrong_job is not None:
-            raise JobWithUnsupportedWriterException(load_id, self.writer_type, wrong_job)
+            raise JobWithUnsupportedWriterException(load_id, self.supported_file_formats, wrong_job)
         return new_jobs
 
     def list_started_jobs(self, load_id: str) -> Sequence[str]:
@@ -143,7 +152,7 @@ class LoaderStorage(VersionedStorage):
         return f"{LoaderStorage.LOADED_FOLDER}/{load_id}"
 
     def build_loading_file_name(self, load_id: str, table_name: str, file_id: str) -> str:
-        file_name = f"{table_name}.{file_id}.{self.writer_type}"
+        file_name = f"{table_name}.{file_id}.{self.preferred_file_format}"
         return f"{load_id}/{LoaderStorage.NEW_JOBS_FOLDER}/{file_name}"
 
     def _move_file(self, load_id: str, source_folder: TWorkingFolder, dest_folder: TWorkingFolder, file_name: str) -> str:
@@ -160,10 +169,10 @@ class LoaderStorage(VersionedStorage):
         return f"{load_path}/{folder}/{file_name}"
 
     @staticmethod
-    def parse_load_file_name(file_name: str) -> Tuple[str, TWriterType]:
+    def parse_load_file_name(file_name: str) -> Tuple[str, TLoaderFileFormat]:
         p = Path(file_name)
-        ext: TWriterType = p.suffix[1:]  # type: ignore
-        if ext not in LoaderStorage.SUPPORTED_WRITERS:
+        ext: TLoaderFileFormat = p.suffix[1:]  # type: ignore
+        if ext not in LoaderStorage.ALL_SUPPORTED_FILE_FORMATS:
             raise TerminalValueError(ext)
 
         parts = p.stem.split(".")
@@ -175,7 +184,7 @@ class LoaderStorageException(StorageException):
 
 
 class JobWithUnsupportedWriterException(LoaderStorageException):
-    def __init__(self, load_id: str, expected_writer_type: TWriterType, wrong_job: str) -> None:
+    def __init__(self, load_id: str, expected_file_format: Iterable[TLoaderFileFormat], wrong_job: str) -> None:
         self.load_id = load_id
-        self.expected_writer_type = expected_writer_type
+        self.expected_file_format = expected_file_format
         self.wrong_job = wrong_job

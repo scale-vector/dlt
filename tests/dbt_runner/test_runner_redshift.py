@@ -9,14 +9,14 @@ from dlt.common.configuration.utils import make_configuration
 from dlt.common.file_storage import FileStorage
 from dlt.common.telemetry import TRunMetrics, get_metrics_from_prometheus
 from dlt.common.typing import StrStr
-from dlt.common.utils import uniq_id
+from dlt.common.utils import uniq_id, with_custom_environ
 
 from dlt.dbt_runner.utils import DBTProcessingError
 from dlt.dbt_runner.configuration import DBTRunnerConfiguration
 from dlt.dbt_runner import runner
 from dlt.loaders.redshift.client import RedshiftSqlClient
 
-from tests.utils import add_config_to_env, clean_storage, init_logger
+from tests.utils import add_config_to_env, clean_storage, init_logger, preserve_environ
 from tests.dbt_runner.utils import modify_and_commit_file, load_secret, setup_runner
 
 DEST_SCHEMA_PREFIX = "test_" + uniq_id()
@@ -24,12 +24,10 @@ DEST_SCHEMA_PREFIX = "test_" + uniq_id()
 
 @pytest.fixture(scope="module", autouse=True)
 def module_autouse() -> None:
-    # set environment before runner config is imported
-    saved_environ = environ.copy()
     # disable GCP in environ
-    del environ["DATASET"]
+    del environ["PROJECT_ID"]
     # set the test case for the unit tests
-    environ["PG_SCHEMA_PREFIX"] = "test_fixture_carbon_bot_session_cases"
+    environ["DEFAULT_DATASET"] = "test_fixture_carbon_bot_session_cases"
     add_config_to_env(PostgresConfiguration)
 
     setup_runner(DEST_SCHEMA_PREFIX)
@@ -39,26 +37,26 @@ def module_autouse() -> None:
     with RedshiftSqlClient("event", runner.CONFIG) as client:
         yield
         # delete temp schemas
-        schema_name = f"{DEST_SCHEMA_PREFIX}_views"
+        dataset_name = f"{DEST_SCHEMA_PREFIX}_views"
         try:
-            client.drop_schema(schema_name)
+            with client.with_alternative_dataset_name(dataset_name):
+                client.drop_dataset()
         except Exception as ex1:
-            logger.error(f"Error when deleting temp dataset {schema_name}: {str(ex1)}")
+            logger.error(f"Error when deleting temp dataset {dataset_name}: {str(ex1)}")
 
-        schema_name = f"{DEST_SCHEMA_PREFIX}_staging"
+        dataset_name = f"{DEST_SCHEMA_PREFIX}_staging"
         try:
-            client.drop_schema(schema_name)
+            with client.with_alternative_dataset_name(dataset_name):
+                client.drop_dataset()
         except Exception as ex2:
-            logger.error(f"Error when deleting temp dataset {schema_name}: {str(ex2)}")
+            logger.error(f"Error when deleting temp dataset {dataset_name}: {str(ex2)}")
 
-        schema_name = f"{DEST_SCHEMA_PREFIX}_event"
+        dataset_name = f"{DEST_SCHEMA_PREFIX}_event"
         try:
-            client.drop_schema(schema_name)
+            with client.with_alternative_dataset_name(dataset_name):
+                client.drop_dataset()
         except Exception as ex2:
-            logger.error(f"Error when deleting temp dataset {schema_name}: {str(ex2)}")
-
-    environ.clear()
-    environ.update(saved_environ)
+            logger.error(f"Error when deleting temp dataset {dataset_name}: {str(ex2)}")
 
 
 def test_configuration() -> None:

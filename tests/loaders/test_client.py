@@ -7,7 +7,7 @@ from dlt.common import json, pendulum
 from dlt.common.schema import Schema
 from dlt.common.schema.utils import new_table
 from dlt.common.file_storage import FileStorage
-from dlt.common.schema import TTableColumns
+from dlt.common.schema import TTableSchemaColumns
 from dlt.common.utils import uniq_id
 
 from dlt.loaders.client_base import DBCursor, SqlJobClientBase
@@ -51,7 +51,6 @@ def client(request) -> SqlJobClientBase:
 def test_initialize_storage(client: SqlJobClientBase) -> None:
     pass
 
-
 @pytest.mark.order(2)
 @pytest.mark.parametrize('client', ALL_CLIENTS, indirect=True)
 def test_get_version_on_empty(client: SqlJobClientBase) -> None:
@@ -86,7 +85,7 @@ def test_complete_load(client: SqlJobClientBase) -> None:
     client.update_storage_schema()
     load_id = "182879721.182912"
     client.complete_load(load_id)
-    load_table = client.sql_client.fully_qualified_table_name(Schema.LOADS_TABLE_NAME)
+    load_table = client.sql_client.make_qualified_table_name(Schema.LOADS_TABLE_NAME)
     load_rows = list(client.sql_client.execute_sql(f"SELECT * FROM {load_table}"))
     assert len(load_rows) == 1
     assert load_rows[0][0] == load_id
@@ -110,7 +109,7 @@ def test_query_iterator(client: SqlJobClientBase) -> None:
         data = curr.fetchall()
 
     # get data from qualified name
-    load_table = client.sql_client.fully_qualified_table_name(Schema.LOADS_TABLE_NAME)
+    load_table = client.sql_client.make_qualified_table_name(Schema.LOADS_TABLE_NAME)
     with client.sql_client.execute_query(f"SELECT * FROM {load_table} ORDER BY inserted_at") as curr:
         assert [c[0] for c in curr.description] == columns
         assert curr.fetchall() == data
@@ -202,7 +201,7 @@ def test_get_storage_table_with_all_types(client: SqlJobClientBase) -> None:
 @pytest.mark.parametrize('client', ALL_CLIENTS, indirect=True)
 def test_data_writer_load(client: SqlJobClientBase, file_storage: FileStorage) -> None:
     rows, table_name = prepare_schema(client, "simple_row")
-    canonical_name = client.sql_client.fully_qualified_table_name(table_name)
+    canonical_name = client.sql_client.make_qualified_table_name(table_name)
     # write only first row
     with io.StringIO() as f:
         write_dataset(client, f, [rows[0]], rows[0].keys())
@@ -224,7 +223,7 @@ def test_data_writer_load(client: SqlJobClientBase, file_storage: FileStorage) -
 @pytest.mark.parametrize('client', ALL_CLIENTS, indirect=True)
 def test_data_writer_string_escape(client: SqlJobClientBase, file_storage: FileStorage) -> None:
     rows, table_name = prepare_schema(client, "simple_row")
-    canonical_name = client.sql_client.fully_qualified_table_name(table_name)
+    canonical_name = client.sql_client.make_qualified_table_name(table_name)
     row = rows[0]
     # this will really drop table without escape
     inj_str = f", NULL'); DROP TABLE {canonical_name} --"
@@ -240,7 +239,7 @@ def test_data_writer_string_escape(client: SqlJobClientBase, file_storage: FileS
 @pytest.mark.parametrize('client', ALL_CLIENTS, indirect=True)
 def test_data_writer_string_escape(client: SqlJobClientBase, file_storage: FileStorage) -> None:
     rows, table_name = prepare_schema(client, "weird_rows")
-    canonical_name = client.sql_client.fully_qualified_table_name(table_name)
+    canonical_name = client.sql_client.make_qualified_table_name(table_name)
     with io.StringIO() as f:
         write_dataset(client, f, rows, rows[0].keys())
         query = f.getvalue()
@@ -257,7 +256,7 @@ def test_load_with_all_types(client: SqlJobClientBase, write_disposition: str, f
     # we should have identical content with all disposition types
     client.schema.update_schema(new_table(table_name, write_disposition=write_disposition, columns=TABLE_UPDATE))
     client.update_storage_schema()
-    canonical_name = client.sql_client.fully_qualified_table_name(table_name)
+    canonical_name = client.sql_client.make_qualified_table_name(table_name)
     # write row
     with io.StringIO() as f:
         write_dataset(client, f, [TABLE_ROW], TABLE_ROW.keys())
@@ -331,7 +330,7 @@ def prepare_schema(client: SqlJobClientBase, case: str) -> None:
     client.update_storage_schema()
     rows = load_json_case(case)
     # use first row to infer table
-    table: TTableColumns = {k: client.schema._infer_column(k, v) for k, v in rows[0].items()}
+    table: TTableSchemaColumns = {k: client.schema._infer_column(k, v) for k, v in rows[0].items()}
     table_name = f"event_{case}_{uniq_id()}"
     client.schema.update_schema(new_table(table_name, columns=table.values()))
     client.update_storage_schema()
